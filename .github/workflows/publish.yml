@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish
 
 on:
   release:
@@ -10,8 +10,31 @@ jobs:
     environment: pypi
     permissions:
       id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Wait for the new version to appear on PyPI
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          for _ in $(seq 1 30); do
+            if curl -sf "https://pypi.org/pypi/mfp-mcp/$VERSION/json" >/dev/null; then
+              echo "mfp-mcp $VERSION is live on PyPI"
+              exit 0
+            fi
+            echo "waiting for PyPI to publish $VERSION..."
+            sleep 10
+          done
+          echo "timed out waiting for PyPI"
+          exit 1
+
+      - name: Install mcp-publisher
+        run: curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Publish to the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mason-levyy/mfp-mcp",
+  "title": "MyFitnessPal",
+  "description": "MCP server for MyFitnessPal: log, search, and analyze your food diary.",
+  "repository": {
+    "url": "https://github.com/Mason-Levyy/myfitnesspal-mcp",
+    "source": "github"
+  },
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "mfp-mcp",
+      "version": "0.1.2",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MFP_COOKIE",
+          "description": "MyFitnessPal session cookie (optional; 'mfp-mcp auth' is the guided alternative)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MFP_USERNAME",
+          "description": "MyFitnessPal username; only needed if MFP's profile lookup fails for your account",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
