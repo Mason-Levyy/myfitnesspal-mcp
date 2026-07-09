@@ -1,8 +1,7 @@
 # myfitnesspal-mcp
 
 Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
-the food database with macros, track trends, and export your nutrition history —
-all against your real MyFitnessPal diary.
+the food database with macros, track trends, and export your nutrition history, all against your real MyFitnessPal diary.
 
 Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
 
@@ -11,6 +10,8 @@ Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
 > **Unofficial.** MyFitnessPal has no public API; this reverse-engineers the
 > web app's own endpoints. It can break whenever MFP changes their site. Use at
 > your own risk, with your own account.
+
+![quick demo](demo.gif)
 
 ## Why this one?
 
