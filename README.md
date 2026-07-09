@@ -99,13 +99,15 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 
 | Tool | What it does |
 | --- | --- |
-| `fitness_get_day` | Nutrition totals, diary entries, and feel note for a day |
+| `fitness_get_day` | Nutrition totals, diary entries, the MFP daily note, and feel note for a day |
 | `fitness_search_food` | Candidate matches with brand, calories, macros, serving, and ids |
 | `fitness_log_food` | Log a food to the real diary (top match, or an exact search candidate) |
 | `fitness_delete_food` | Remove a diary entry by name match |
 | `fitness_modify_food` | Replace an entry (or change its quantity) |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
+| `fitness_get_note` | Read the MyFitnessPal daily diary note (the "Notes" box) for a day |
+| `fitness_log_note` | Write that daily note to MFP (replace, or `append` a new line) |
 | `fitness_log_feel` | Save a subjective "how I feel" note (stored locally, never sent to MFP) |
 | `fitness_get_trends` | One metric over a date range: weight, calories_in, protein, carbs, fat |
 | `fitness_bulk_export` | Whole date range in one call, for analysis |
@@ -165,10 +167,12 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
   session that impersonates Chrome's TLS fingerprint so Cloudflare lets it
   through with just the NextAuth session cookie.
 - Writes replicate the web app's own XHR calls: the legacy food-search page
-  supplies the `food_id`/`weight_id` that `/food/add` accepts, and deletes go
-  through `/food/remove` with the page CSRF token.
+  supplies the `food_id`/`weight_id` that `/food/add` accepts, deletes go
+  through `/food/remove`, and the daily note reads/writes via `/food/note` —
+  each with the page CSRF token.
 - Day summaries, trends, and exports read a local SQLite cache that gap-fills
-  missing days; feel notes are local-only.
+  missing days. The MyFitnessPal daily note syncs both ways; feel notes are
+  local-only.
 
 ## Development
 

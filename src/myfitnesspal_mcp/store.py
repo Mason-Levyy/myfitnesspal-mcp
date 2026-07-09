@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS feel_note (
     note TEXT,
     rating INTEGER
 );
+CREATE TABLE IF NOT EXISTS day_note (
+    day TEXT PRIMARY KEY,
+    body TEXT
+);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -133,6 +137,24 @@ class Store:
         ).fetchone()
         return _row_to_dict(row)
 
+    def set_note(self, day: str, body: str | None) -> None:
+        """The MyFitnessPal daily diary note (synced from/to MFP), distinct from
+        the local-only feel note."""
+        self.conn.execute(
+            "INSERT INTO day_note (day, body) VALUES (?, ?) "
+            "ON CONFLICT(day) DO UPDATE SET body = excluded.body",
+            (day, body),
+        )
+        self.conn.commit()
+
+    def note(self, day: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT body FROM day_note WHERE day = ?", (day,)
+        ).fetchone()
+        if row is None:
+            return None
+        return row["body"]
+
     def days_with_nutrition(self, start: str, end: str) -> set[str]:
         rows = self.conn.execute(
             "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ?", (start, end)
@@ -167,12 +189,21 @@ class Store:
                     (start, end),
                 )
             }
+            | {
+                r["day"]
+                for r in self.conn.execute(
+                    "SELECT day FROM day_note WHERE day >= ? AND day <= ? "
+                    "AND body IS NOT NULL AND body != ''",
+                    (start, end),
+                )
+            }
         )
         return [
             {
                 "day": day,
                 "nutrition": self.nutrition(day),
                 "diary": self.diary(day),
+                "note": self.note(day),
                 "feel": self.feel(day),
             }
             for day in days

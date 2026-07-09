@@ -48,10 +48,35 @@ class FakeDay:
         ]
 
 
+class FakeNoteResponse:
+    def __init__(self, body):
+        self._body = body
+
+    def json(self):
+        return {"item": {"body": self._body}}
+
+    def raise_for_status(self):
+        pass
+
+
+class FakeNoteSession:
+    def __init__(self, body):
+        self.body = body
+
+    def get(self, url, **kwargs):
+        return FakeNoteResponse(self.body)
+
+
 class FakeSyncClient:
-    def __init__(self):
+    BASE_URL_SECURE = "https://www.myfitnesspal.com/"
+
+    def __init__(self, note_body="today felt great"):
         self.fetched = []
         self.weights = {}
+        self.access_token = "fake-token"
+        self.user_id = "user-1"
+        self.effective_username = "tester"
+        self.session = FakeNoteSession(note_body)
 
     def get_date(self, day):
         self.fetched.append(day)
@@ -80,6 +105,7 @@ def test_refresh_day_populates_store(store):
             "fat": None,
         }
     ]
+    assert store.note(TODAY.isoformat()) == "today felt great"
 
 
 def test_poll_skips_when_synced_today(store, monkeypatch):
