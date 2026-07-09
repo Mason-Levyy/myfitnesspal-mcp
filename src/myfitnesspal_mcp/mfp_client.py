@@ -38,12 +38,20 @@ class CurlCffiClient(myfitnesspal.Client):
     Chrome TLS/JA3 fingerprint passes with just the NextAuth session cookie.
     """
 
-    def __init__(self, cookiejar: CookieJar):
+    def __init__(
+        self,
+        cookiejar: CookieJar,
+        username: str | None = None,
+        impersonate: str | None = None,
+    ):
+        self._username_override = username
         self._client_instance_id = uuid.uuid4()
         self._request_counter = 0
         self._log_requests_to = None
         self.unit_aware = False
-        self.session = cffi_requests.Session(impersonate=config.impersonate())
+        self.session = cffi_requests.Session(
+            impersonate=impersonate or config.impersonate()
+        )
         self.session.cookies.update(cookiejar)
         self._auth_data = self._get_auth_data()
         self._user_metadata = self._get_user_metadata()
@@ -57,7 +65,7 @@ class CurlCffiClient(myfitnesspal.Client):
                 return meta
         except Exception:
             pass
-        username = auth.saved_username()
+        username = self._username_override or auth.saved_username()
         if not username:
             raise MyfitnesspalLoginError(
                 "Authenticated, but couldn't read your MyFitnessPal profile. "
@@ -93,8 +101,14 @@ def cookies_to_jar(cookies: dict[str, str]) -> CookieJar:
     return jar
 
 
-def build_client(cookies: dict[str, str]) -> CurlCffiClient:
-    return CurlCffiClient(cookies_to_jar(cookies))
+def build_client(
+    cookies: dict[str, str],
+    username: str | None = None,
+    impersonate: str | None = None,
+) -> CurlCffiClient:
+    return CurlCffiClient(
+        cookies_to_jar(cookies), username=username, impersonate=impersonate
+    )
 
 
 _client: CurlCffiClient | None = None
