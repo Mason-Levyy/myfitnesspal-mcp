@@ -82,6 +82,10 @@ def client(search_html, diary_html):
     fake.session.route("GET", "food/diary/tester", FakeResponse(text=diary_html))
     fake.session.route("POST", "food/add", FakeResponse(status_code=204))
     fake.session.route("POST", "food/remove", FakeResponse(status_code=200))
+    fake.session.route(
+        "GET", "food/note", FakeResponse(json_data={"item": {"body": "hello world"}})
+    )
+    fake.session.route("POST", "food/note", FakeResponse(status_code=200))
     return fake
 
 

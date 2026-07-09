@@ -55,13 +55,15 @@ def day_summary(store: Store, day: datetime.date) -> dict:
         "day": key,
         "nutrition": store.nutrition(key),
         "diary": store.diary(key),
+        "note": store.note(key),
         "feel": store.feel(key),
     }
 
 
 @mcp.tool()
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
-    """Nutrition summary, diary entries, and feel note for a day.
+    """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
+    local feel note for a day.
 
     date: YYYY-MM-DD (default: today).
     """
@@ -212,6 +214,48 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
 
 
 @mcp.tool()
+async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict:
+    """Read the MyFitnessPal daily diary note (the free-text 'Notes' box at the
+    bottom of the day) straight from your account.
+
+    date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+
+    def op():
+        store = get_store()
+        client = mfp_client.get_client()
+        body = diary.get_note(client, day)
+        store.set_note(day.isoformat(), body)
+        return {"day": day.isoformat(), "note": body}
+
+    return await run_with_refresh(ctx, op)
+
+
+@mcp.tool()
+async def fitness_log_note(
+    text: str, date: str | None = None, append: bool = False, ctx: Context = None
+) -> dict:
+    """Write the MyFitnessPal daily diary note (the free-text 'Notes' box at the
+    bottom of the day). This is your real MFP note, synced to your account —
+    distinct from the local-only fitness_log_feel.
+
+    text: the note body. append: add to the existing note on a new line instead
+    of replacing it. date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+
+    def op():
+        store = get_store()
+        client = mfp_client.get_client()
+        result = diary.push_note(client, day, text, append=append)
+        store.set_note(day.isoformat(), result["note"])
+        return {"ok": True, **result}
+
+    return await run_with_refresh(ctx, op)
+
+
+@mcp.tool()
 def fitness_log_feel(
     note: str | None = None, rating: int | None = None, date: str | None = None
 ) -> dict:
@@ -260,7 +304,8 @@ async def fitness_bulk_export(
     ctx: Context = None,
 ) -> dict:
     """Export a whole date range at once for analysis: per-day nutrition
-    totals, food entries with macros, and feel notes. Read-only.
+    totals, food entries with macros, the MyFitnessPal daily note, and local
+    feel notes. Read-only.
 
     start/end: YYYY-MM-DD (default: last 30 days ending today).
     sync_first: gap-fill from MyFitnessPal before exporting. Off by default so
