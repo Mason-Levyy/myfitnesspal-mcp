@@ -8,6 +8,7 @@ page csrf token.
 """
 
 from datetime import date
+from html import unescape
 from urllib import parse
 
 from lxml import html as lh
@@ -288,6 +289,60 @@ def set_weight(client, day: date, value: float) -> dict:
         )
     item = resp.json()["items"][0]
     return {"day": item["date"], "weight": item["value"], "unit": item.get("unit")}
+
+
+def get_note(client, day: date) -> str | None:
+    """Reads the day's free-text diary note (the 'Notes' box at the bottom of
+    the food diary). MFP stores the body double-HTML-encoded; returns the
+    decoded text, or None when the day has no note."""
+    url = (
+        parse.urljoin(client.BASE_URL_SECURE, "food/note")
+        + f"?date={day.isoformat()}"
+    )
+    resp = client.session.get(
+        url, headers=api_headers(client, {"Accept": "application/json"})
+    )
+    resp.raise_for_status()
+    item = (resp.json() or {}).get("item") or {}
+    body = item.get("body")
+    if not body:
+        return None
+    return unescape(unescape(body)) or None
+
+
+def set_note(client, day: date, body: str) -> dict:
+    """Writes the day's diary note, replacing whatever was there. Mirrors the
+    web app's Save Note request: a form POST with the page csrf token."""
+    _, csrf = diary_page(client, day)
+    resp = client.session.post(
+        parse.urljoin(client.BASE_URL_SECURE, "food/note"),
+        data={"body": body, "date": day.isoformat()},
+        headers=api_headers(
+            client,
+            {
+                "Accept": "*/*",
+                "X-CSRF-Token": csrf,
+                "Origin": "https://www.myfitnesspal.com",
+                "Referer": parse.urljoin(
+                    client.BASE_URL_SECURE, f"food/diary/{client.effective_username}"
+                ),
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            },
+        ),
+    )
+    if resp.status_code not in (200, 201, 204):
+        raise RuntimeError(f"MyFitnessPal /food/note returned HTTP {resp.status_code}")
+    return {"day": day.isoformat(), "note": body}
+
+
+def push_note(client, day: date, text: str, append: bool = False) -> dict:
+    """Writes `text` as the day's diary note. With append=True, keeps the
+    existing note and adds `text` on a new line."""
+    if append:
+        existing = get_note(client, day)
+        if existing:
+            text = f"{existing}\n{text}"
+    return set_note(client, day, text)
 
 
 def get_exercise(client, day: date) -> dict:

@@ -1,7 +1,7 @@
 import logging
 from datetime import date, timedelta
 
-from . import config
+from . import config, diary
 from .mfp_client import is_auth_error
 from .store import Store
 
@@ -64,6 +64,17 @@ def refresh_day(store: Store, client, day: date) -> None:
                 }
             )
     store.replace_diary(day.isoformat(), entries)
+
+    # The diary note lives behind a separate request; a transient failure here
+    # must not discard the nutrition/diary we just synced for the day.
+    try:
+        note_body = diary.get_note(client, day)
+    except Exception as exc:
+        if is_auth_error(exc):
+            raise
+        logger.warning("note fetch failed for %s: %s", day, exc)
+    else:
+        store.set_note(day.isoformat(), note_body)
 
 
 def poll(store: Store, client, days: int | None = None, force: bool = False) -> None:

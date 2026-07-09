@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 
 import pytest
 from myfitnesspal.exceptions import MyfitnesspalLoginError
@@ -87,6 +88,21 @@ def test_log_feel_tool(local_store):
     result = server.fitness_log_feel(note="strong", rating=5, date="2026-07-08")
     assert result == {"day": "2026-07-08", "note": "strong", "rating": 5}
     assert local_store.feel("2026-07-08")["rating"] == 5
+
+
+def test_day_summary_includes_note(local_store):
+    local_store.set_note("2026-07-08", "long run, felt strong")
+    summary = server.day_summary(local_store, datetime.date(2026, 7, 8))
+    assert summary["note"] == "long run, felt strong"
+
+
+def test_bulk_export_includes_note(local_store):
+    local_store.set_note("2026-07-05", "rest day")
+    result = asyncio.run(
+        server.fitness_bulk_export(start="2026-07-01", end="2026-07-08")
+    )
+    assert result["count"] == 1
+    assert result["days"][0]["note"] == "rest day"
 
 
 def test_trends_rejects_unknown_metric(local_store):

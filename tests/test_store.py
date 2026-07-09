@@ -39,6 +39,13 @@ def test_feel_upsert(store):
     assert store.feel("2026-07-02") is None
 
 
+def test_note_upsert(store):
+    store.set_note("2026-07-01", "first draft")
+    store.set_note("2026-07-01", "final note")
+    assert store.note("2026-07-01") == "final note"
+    assert store.note("2026-07-02") is None
+
+
 def test_trend_filters_nulls_and_orders(store):
     store.upsert_nutrition("2026-07-02", weight=81.0)
     store.upsert_nutrition("2026-07-01", weight=80.0)
@@ -65,10 +72,23 @@ def test_export_range_unions_sources(store):
     store.upsert_nutrition("2026-07-01", calories=2000.0)
     store.replace_diary("2026-07-02", [{"meal": "Lunch", "name": "Soup"}])
     store.set_feel("2026-07-03", "good", 5)
+    store.set_note("2026-07-04", "walked 10k steps")
     days = store.export_range("2026-07-01", "2026-07-31")
-    assert [d["day"] for d in days] == ["2026-07-01", "2026-07-02", "2026-07-03"]
+    assert [d["day"] for d in days] == [
+        "2026-07-01",
+        "2026-07-02",
+        "2026-07-03",
+        "2026-07-04",
+    ]
     assert days[1]["diary"][0]["name"] == "Soup"
     assert days[2]["feel"]["rating"] == 5
+    assert days[3]["note"] == "walked 10k steps"
+
+
+def test_export_range_ignores_empty_notes(store):
+    store.set_note("2026-07-05", None)
+    store.set_note("2026-07-06", "")
+    assert store.export_range("2026-07-01", "2026-07-31") == []
 
 
 def test_mark_synced_roundtrip(store):
