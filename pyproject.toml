@@ -1,5 +1,5 @@
 [project]
-name = "myfitnesspal-mcp"
+name = "mfp-mcp"
 version = "0.1.0"
 description = "MCP server for MyFitnessPal: log, search, and analyze your food diary from any MCP client"
 readme = "README.md"
@@ -27,6 +27,7 @@ autorefresh = ["playwright>=1.40"]
 Repository = "https://github.com/Mason-Levyy/myfitnesspal-mcp"
 
 [project.scripts]
+mfp-mcp = "myfitnesspal_mcp.cli:main"
 myfitnesspal-mcp = "myfitnesspal_mcp.cli:main"
 
 [dependency-groups]
