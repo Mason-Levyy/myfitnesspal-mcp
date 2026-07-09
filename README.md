@@ -6,6 +6,8 @@ all against your real MyFitnessPal diary.
 
 Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
 
+<!-- mcp-name: io.github.mason-levyy/mfp-mcp -->
+
 > **Unofficial.** MyFitnessPal has no public API; this reverse-engineers the
 > web app's own endpoints. It can break whenever MFP changes their site. Use at
 > your own risk, with your own account.

@@ -1,6 +1,6 @@
 [project]
 name = "mfp-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for MyFitnessPal: log, search, and analyze your food diary from any MCP client"
 readme = "README.md"
 requires-python = ">=3.10"
