@@ -4,6 +4,8 @@ Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
 the food database with macros, track trends, and export your nutrition history —
 all against your real MyFitnessPal diary.
 
+Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
+
 > **Unofficial.** MyFitnessPal has no public API; this reverse-engineers the
 > web app's own endpoints. It can break whenever MFP changes their site. Use at
 > your own risk, with your own account.
@@ -27,7 +29,7 @@ username/password login that most existing integrations rely on. This server:
    [Authentication](#authentication)):
 
    ```bash
-   uvx --from git+https://github.com/Mason-Levyy/myfitnesspal-mcp myfitnesspal-mcp auth
+   uvx mfp-mcp auth
    ```
 
 2. Add the server to your client.
@@ -35,7 +37,7 @@ username/password login that most existing integrations rely on. This server:
    **Claude Code**
 
    ```bash
-   claude mcp add myfitnesspal -- uvx --from git+https://github.com/Mason-Levyy/myfitnesspal-mcp myfitnesspal-mcp
+   claude mcp add myfitnesspal -- uvx mfp-mcp
    ```
 
    **Claude Desktop** (`claude_desktop_config.json`)
@@ -45,11 +47,7 @@ username/password login that most existing integrations rely on. This server:
      "mcpServers": {
        "myfitnesspal": {
          "command": "uvx",
-         "args": [
-           "--from",
-           "git+https://github.com/Mason-Levyy/myfitnesspal-mcp",
-           "myfitnesspal-mcp"
-         ]
+         "args": ["mfp-mcp"]
        }
      }
    }
@@ -70,7 +68,7 @@ session cookie:
 2. Open DevTools (F12) → **Application** (Chrome) or **Storage** (Firefox) →
    **Cookies** → `https://www.myfitnesspal.com`.
 3. Copy the value of `__Secure-next-auth.session-token`.
-4. Paste it into the `myfitnesspal-mcp auth` prompt (input is hidden).
+4. Paste it into the `mfp-mcp auth` prompt (input is hidden).
 
 Pasting the entire `Cookie:` header from any request in the Network tab also
 works. Cookies are stored with owner-only permissions in your platform config
@@ -87,12 +85,12 @@ client it is retrying, boots the profile headlessly, lets MyFitnessPal rotate
 the session token, saves the fresh cookie, and retries the call.
 
 ```bash
-uvx --from 'myfitnesspal-mcp[autorefresh] @ git+https://github.com/Mason-Levyy/myfitnesspal-mcp' playwright install chromium
-uvx --from 'myfitnesspal-mcp[autorefresh] @ git+https://github.com/Mason-Levyy/myfitnesspal-mcp' myfitnesspal-mcp auth
+uvx --from 'mfp-mcp[autorefresh]' playwright install chromium
+uvx --from 'mfp-mcp[autorefresh]' mfp-mcp auth
 ```
 
-Then use the same `--from 'myfitnesspal-mcp[autorefresh] @ …'` form in your
-client config.
+Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
+(e.g. `uvx --from 'mfp-mcp[autorefresh]' mfp-mcp`).
 
 ## Tools
 
@@ -127,7 +125,7 @@ welcome.
 The default transport is stdio. For network clients:
 
 ```bash
-myfitnesspal-mcp --http --host 127.0.0.1 --port 8484
+mfp-mcp --http --host 127.0.0.1 --port 8484
 ```
 
 This serves streamable HTTP at `/mcp`. **There is no built-in authentication —
@@ -150,7 +148,7 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
 - **403 / Cloudflare blocked**: try `MFP_IMPERSONATE=chrome124` (or another
   [curl_cffi target](https://github.com/lexiforest/curl_cffi#supported-browsers)).
   Datacenter IPs get challenged far more than residential ones.
-- **"Session expired"**: re-run `myfitnesspal-mcp auth`, or set up
+- **"Session expired"**: re-run `mfp-mcp auth`, or set up
   [auto-refresh](#auto-refresh-recommended).
 - **"couldn't read your MyFitnessPal profile"**: MFP's profile endpoint 500s
   for some accounts. Set `MFP_USERNAME` to your username (not your email).
