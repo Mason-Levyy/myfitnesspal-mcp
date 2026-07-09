@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.mason-levyy/mfp-mcp",
+  "name": "io.github.Mason-Levyy/mfp-mcp",
   "title": "MyFitnessPal",
   "description": "MCP server for MyFitnessPal: log, search, and analyze your food diary.",
   "repository": {
     "url": "https://github.com/Mason-Levyy/myfitnesspal-mcp",
     "source": "github"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mfp-mcp",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
