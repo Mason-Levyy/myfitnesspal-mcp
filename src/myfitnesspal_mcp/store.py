@@ -60,6 +60,22 @@ TREND_COLUMNS = {
 }
 
 
+POPULATED_DAY_QUERIES = (
+    "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ?",
+    "SELECT DISTINCT day FROM diary_entry WHERE day >= ? AND day <= ?",
+    "SELECT day FROM feel_note WHERE day >= ? AND day <= ?",
+    "SELECT day FROM day_note WHERE day >= ? AND day <= ? "
+    "AND body IS NOT NULL AND body != ''",
+)
+
+
+def trend_column(metric: str) -> str:
+    column = TREND_COLUMNS.get(metric)
+    if column is None:
+        raise ValueError(f"unknown metric (use {' | '.join(TREND_COLUMNS)})")
+    return column
+
+
 def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
     if row is None:
         return None
@@ -162,52 +178,27 @@ class Store:
         return {r["day"] for r in rows}
 
     def trend(self, metric: str, start: str, end: str) -> list[dict]:
-        column = TREND_COLUMNS.get(metric)
-        if column is None:
-            raise ValueError(f"unknown metric (use {' | '.join(TREND_COLUMNS)})")
         rows = self.conn.execute(
-            f"SELECT day, {column} AS value FROM day_nutrition "
+            f"SELECT day, {trend_column(metric)} AS value FROM day_nutrition "
             "WHERE day >= ? AND day <= ? AND value IS NOT NULL ORDER BY day",
             (start, end),
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def day_record(self, day: str) -> dict:
+        return {
+            "day": day,
+            "nutrition": self.nutrition(day),
+            "diary": self.diary(day),
+            "note": self.note(day),
+            "feel": self.feel(day),
+        }
+
     def export_range(self, start: str, end: str) -> list[dict]:
-        days = sorted(
-            self.days_with_nutrition(start, end)
-            | {
-                r["day"]
-                for r in self.conn.execute(
-                    "SELECT DISTINCT day FROM diary_entry WHERE day >= ? AND day <= ?",
-                    (start, end),
-                )
-            }
-            | {
-                r["day"]
-                for r in self.conn.execute(
-                    "SELECT day FROM feel_note WHERE day >= ? AND day <= ?",
-                    (start, end),
-                )
-            }
-            | {
-                r["day"]
-                for r in self.conn.execute(
-                    "SELECT day FROM day_note WHERE day >= ? AND day <= ? "
-                    "AND body IS NOT NULL AND body != ''",
-                    (start, end),
-                )
-            }
-        )
-        return [
-            {
-                "day": day,
-                "nutrition": self.nutrition(day),
-                "diary": self.diary(day),
-                "note": self.note(day),
-                "feel": self.feel(day),
-            }
-            for day in days
-        ]
+        days: set[str] = set()
+        for query in POPULATED_DAY_QUERIES:
+            days |= {row["day"] for row in self.conn.execute(query, (start, end))}
+        return [self.day_record(day) for day in sorted(days)]
 
     def last_synced_on(self) -> str | None:
         row = self.conn.execute(
@@ -217,10 +208,10 @@ class Store:
             return None
         return row["value"]
 
-    def mark_synced(self) -> None:
+    def mark_synced(self, day: date | None = None) -> None:
         self.conn.execute(
             "INSERT INTO meta (key, value) VALUES ('last_synced_on', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (date.today().isoformat(),),
+            ((day or date.today()).isoformat(),),
         )
         self.conn.commit()

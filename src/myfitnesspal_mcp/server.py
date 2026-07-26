@@ -5,7 +5,7 @@ from typing import Any, Callable
 from mcp.server.fastmcp import Context, FastMCP
 
 from . import diary, mfp_client, refresh, sync
-from .store import Store, TREND_COLUMNS
+from .store import Store, trend_column
 
 mcp = FastMCP("myfitnesspal")
 
@@ -23,6 +23,19 @@ def parse_day(value: str | None) -> datetime.date:
     if value is None:
         return datetime.date.today()
     return datetime.date.fromisoformat(value)
+
+
+def parse_range(
+    start: str | None, end: str | None, span_days: int = 30
+) -> tuple[datetime.date, datetime.date]:
+    end_day = parse_day(end)
+    if start is None:
+        start_day = end_day - datetime.timedelta(days=span_days)
+    else:
+        start_day = parse_day(start)
+    if start_day > end_day:
+        raise ValueError("start must be on or before end")
+    return start_day, end_day
 
 
 async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
@@ -49,15 +62,12 @@ async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
         return result
 
 
-def day_summary(store: Store, day: datetime.date) -> dict:
-    key = day.isoformat()
-    return {
-        "day": key,
-        "nutrition": store.nutrition(key),
-        "diary": store.diary(key),
-        "note": store.note(key),
-        "feel": store.feel(key),
-    }
+async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
+    """Runs `op` against the store and a live MFP client, re-resolving both on
+    the retry so a refreshed session is picked up."""
+    return await run_with_refresh(
+        ctx, lambda: op(get_store(), mfp_client.get_client())
+    )
 
 
 @mcp.tool()
@@ -69,14 +79,12 @@ async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         sync.poll(store, client)
         sync.refresh_day(store, client, day)
-        return day_summary(store, day)
+        return store.day_record(day.isoformat())
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -89,11 +97,13 @@ async def fitness_search_food(
     food_id + weight_id to pass to fitness_log_food to log exactly that item.
     """
 
-    def op():
-        client = mfp_client.get_client()
-        return {"query": query, "results": diary.search_food(client, query, limit, with_macros)}
+    def op(store, client):
+        return {
+            "query": query,
+            "results": diary.search_food(client, query, limit, with_macros),
+        }
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -115,16 +125,14 @@ async def fitness_log_food(
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         result = diary.push_food(
             client, day, meal, query, quantity, food_id=food_id, weight_id=weight_id
         )
         sync.refresh_day(store, client, day)
-        return {"ok": True, **result, "day": day_summary(store, day)}
+        return {"ok": True, **result, "day": store.day_record(day.isoformat())}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -139,14 +147,12 @@ async def fitness_delete_food(
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         result = diary.delete_food(client, day, query, meal)
         sync.refresh_day(store, client, day)
         return {"ok": True, **result}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -166,14 +172,12 @@ async def fitness_modify_food(
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         result = diary.modify_food(client, day, meal, query, new_query, quantity)
         sync.refresh_day(store, client, day)
         return {"ok": True, **result}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -188,14 +192,12 @@ async def fitness_log_weight(
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         result = diary.set_weight(client, day, weight)
         store.upsert_nutrition(day.isoformat(), weight=result["weight"])
         return {"ok": True, **result}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -206,11 +208,10 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
     """
     day = parse_day(date)
 
-    def op():
-        client = mfp_client.get_client()
+    def op(store, client):
         return diary.get_exercise(client, day)
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -222,14 +223,12 @@ async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         body = diary.get_note(client, day)
         store.set_note(day.isoformat(), body)
         return {"day": day.isoformat(), "note": body}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -245,14 +244,12 @@ async def fitness_log_note(
     """
     day = parse_day(date)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         result = diary.push_note(client, day, text, append=append)
         store.set_note(day.isoformat(), result["note"])
         return {"ok": True, **result}
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -278,24 +275,17 @@ async def fitness_get_trends(
     start/end: YYYY-MM-DD (default: last 30 days).
     Returns {metric, points: [{day, value}, ...]} with nulls omitted.
     """
-    if metric not in TREND_COLUMNS:
-        raise ValueError(f"unknown metric (use {' | '.join(TREND_COLUMNS)})")
-    end_day = parse_day(end)
-    if start is None:
-        start_day = end_day - datetime.timedelta(days=30)
-    else:
-        start_day = parse_day(start)
+    trend_column(metric)
+    start_day, end_day = parse_range(start, end)
 
-    def op():
-        store = get_store()
-        client = mfp_client.get_client()
+    def op(store, client):
         sync.poll(store, client)
         return {
             "metric": metric,
             "points": store.trend(metric, start_day.isoformat(), end_day.isoformat()),
         }
 
-    return await run_with_refresh(ctx, op)
+    return await with_session(ctx, op)
 
 
 @mcp.tool()
@@ -311,20 +301,13 @@ async def fitness_bulk_export(
     sync_first: gap-fill from MyFitnessPal before exporting. Off by default so
     large historical exports stay fast on cached data.
     """
-    end_day = parse_day(end)
-    if start is None:
-        start_day = end_day - datetime.timedelta(days=30)
-    else:
-        start_day = parse_day(start)
-    if start_day > end_day:
-        raise ValueError("start must be on or before end")
+    start_day, end_day = parse_range(start, end)
 
     def op():
         store = get_store()
         if sync_first:
-            client = mfp_client.get_client()
             span = (end_day - start_day).days + 1
-            sync.poll(store, client, days=span, force=True)
+            sync.poll(store, mfp_client.get_client(), days=span, force=True)
         days = store.export_range(start_day.isoformat(), end_day.isoformat())
         return {
             "start": start_day.isoformat(),
