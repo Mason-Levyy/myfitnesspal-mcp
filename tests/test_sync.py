@@ -83,7 +83,8 @@ class FakeSyncClient:
         return FakeDay()
 
     def get_measurements(self, kind, earliest):
-        return self.weights
+        self.measurements_earliest = earliest
+        return {day: value for day, value in self.weights.items() if day >= earliest}
 
 
 def test_refresh_day_populates_store(store):
@@ -110,18 +111,38 @@ def test_refresh_day_populates_store(store):
 
 def test_poll_skips_when_synced_today(store, monkeypatch):
     client = FakeSyncClient()
-    store.mark_synced()
-    sync.poll(store, client)
+    store.mark_synced(TODAY)
+    sync.poll(store, client, today=TODAY)
     assert client.fetched == []
-    sync.poll(store, client, force=True, days=1)
+    sync.poll(store, client, force=True, days=1, today=TODAY)
     assert client.fetched != []
 
 
 def test_poll_records_weights(store):
     client = FakeSyncClient()
     client.weights = {TODAY: 80.0, TODAY - datetime.timedelta(days=400): 90.0}
-    sync.poll(store, client, days=3, force=True)
+    sync.poll(store, client, days=3, force=True, today=TODAY)
     assert store.nutrition(TODAY.isoformat())["weight"] == 80.0
+
+
+def test_poll_backfills_weight_for_already_cached_day(store):
+    """A weigh-in lands on a day whose nutrition is already cached.
+
+    Such a day is absent from `days_to_fetch`, so keying the measurement query
+    off the fetched days would strand the weight permanently.
+    """
+    window_start = TODAY - datetime.timedelta(days=2)
+    yesterday = TODAY - datetime.timedelta(days=1)
+    for day in (window_start, yesterday):
+        store.upsert_nutrition(day.isoformat(), calories=2000.0)
+
+    client = FakeSyncClient()
+    client.weights = {yesterday: 79.5}
+    sync.poll(store, client, days=3, force=True, today=TODAY)
+
+    assert client.fetched == [TODAY]
+    assert client.measurements_earliest == window_start
+    assert store.nutrition(yesterday.isoformat())["weight"] == 79.5
 
 
 def test_poll_propagates_auth_errors(store):
