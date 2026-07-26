@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 
 import pytest
 from myfitnesspal.exceptions import MyfitnesspalLoginError
@@ -90,10 +89,9 @@ def test_log_feel_tool(local_store):
     assert local_store.feel("2026-07-08")["rating"] == 5
 
 
-def test_day_summary_includes_note(local_store):
+def test_day_record_includes_note(local_store):
     local_store.set_note("2026-07-08", "long run, felt strong")
-    summary = server.day_summary(local_store, datetime.date(2026, 7, 8))
-    assert summary["note"] == "long run, felt strong"
+    assert local_store.day_record("2026-07-08")["note"] == "long run, felt strong"
 
 
 def test_bulk_export_includes_note(local_store):

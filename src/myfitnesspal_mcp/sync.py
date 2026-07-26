@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 from datetime import date, timedelta
 
 from . import config, diary
@@ -8,104 +9,100 @@ from .store import Store
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
+def tolerating_failures(description: str):
+    """Auth failures propagate so the caller can refresh the session and retry;
+    everything else is logged and skipped."""
+    try:
+        yield
+    except Exception as exc:
+        if is_auth_error(exc):
+            raise
+        logger.warning("%s failed: %s", description, exc)
+
+
+def as_float(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def first_number(values: dict, *keys) -> float | None:
     for key in keys:
-        value = values.get(key)
-        if value is not None:
-            return float(value)
+        number = as_float(values.get(key))
+        if number is not None:
+            return number
     return None
 
 
-def days_to_fetch(existing: set[str], lookback: int, today: date) -> list[date]:
-    """Today is always refetched (the diary is live); past days only when the
-    cache has no row for them."""
-    days = []
-    for offset in range(lookback):
-        day = today - timedelta(days=offset)
-        if day == today or day.isoformat() not in existing:
-            days.append(day)
-    return days
+def days_to_fetch(cached: set[str], lookback: int, today: date) -> list[date]:
+    """Today is always refetched because the diary is live; past days only when
+    the cache has no row for them."""
+    past = (today - timedelta(days=offset) for offset in range(1, lookback))
+    return [today] + [day for day in past if day.isoformat() not in cached]
+
+
+def macros(totals: dict) -> dict:
+    return {
+        "calories": first_number(totals, "calories"),
+        "protein": first_number(totals, "protein"),
+        "carbs": first_number(totals, "carbohydrates", "carbs"),
+        "fat": first_number(totals, "fat"),
+    }
 
 
 def refresh_day(store: Store, client, day: date) -> None:
     mfp_day = client.get_date(day)
-    totals = mfp_day.totals
-    goals = mfp_day.goals or {}
-
-    water_ml = None
-    try:
-        if mfp_day.water is not None:
-            water_ml = float(mfp_day.water)
-    except Exception:
-        water_ml = None
+    key = day.isoformat()
 
     store.upsert_nutrition(
-        day.isoformat(),
-        calories=first_number(totals, "calories"),
-        protein=first_number(totals, "protein"),
-        carbs=first_number(totals, "carbohydrates", "carbs"),
-        fat=first_number(totals, "fat"),
-        water_ml=water_ml,
-        goal_calories=first_number(goals, "calories"),
+        key,
+        **macros(mfp_day.totals),
+        water_ml=as_float(mfp_day.water),
+        goal_calories=first_number(mfp_day.goals or {}, "calories"),
     )
 
-    entries = []
-    for meal in mfp_day.meals:
-        for entry in meal.entries:
-            entry_totals = entry.totals
-            entries.append(
-                {
-                    "meal": str(meal.name).title(),
-                    "name": entry.name,
-                    "calories": first_number(entry_totals, "calories"),
-                    "protein": first_number(entry_totals, "protein"),
-                    "carbs": first_number(entry_totals, "carbohydrates", "carbs"),
-                    "fat": first_number(entry_totals, "fat"),
-                }
-            )
-    store.replace_diary(day.isoformat(), entries)
+    store.replace_diary(
+        key,
+        [
+            {"meal": str(meal.name).title(), "name": entry.name, **macros(entry.totals)}
+            for meal in mfp_day.meals
+            for entry in meal.entries
+        ],
+    )
 
-    # The diary note lives behind a separate request; a transient failure here
-    # must not discard the nutrition/diary we just synced for the day.
-    try:
-        note_body = diary.get_note(client, day)
-    except Exception as exc:
-        if is_auth_error(exc):
-            raise
-        logger.warning("note fetch failed for %s: %s", day, exc)
-    else:
-        store.set_note(day.isoformat(), note_body)
+    with tolerating_failures(f"note fetch for {day}"):
+        store.set_note(key, diary.get_note(client, day))
 
 
-def poll(store: Store, client, days: int | None = None, force: bool = False) -> None:
-    if not force and store.last_synced_on() == date.today().isoformat():
+def poll(
+    store: Store,
+    client,
+    days: int | None = None,
+    force: bool = False,
+    today: date | None = None,
+) -> None:
+    today = today or date.today()
+    if not force and store.last_synced_on() == today.isoformat():
         return
 
     lookback = days or config.sync_days()
-    today = date.today()
     window_start = today - timedelta(days=lookback - 1)
-    existing = store.days_with_nutrition(
+    cached = store.days_with_nutrition(
         window_start.isoformat(), (today - timedelta(days=1)).isoformat()
     )
 
-    fetched = days_to_fetch(existing, lookback, today)
-    for day in fetched:
-        try:
+    for day in days_to_fetch(cached, lookback, today):
+        with tolerating_failures(f"sync for {day}"):
             refresh_day(store, client, day)
-        except Exception as exc:
-            if is_auth_error(exc):
-                raise
-            logger.warning("skipping %s: %s", day, exc)
 
-    if fetched:
-        try:
-            weights = client.get_measurements("Weight", min(fetched))
-            for day, value in weights.items():
-                if day >= window_start:
-                    store.upsert_nutrition(day.isoformat(), weight=float(value))
-        except Exception as exc:
-            if is_auth_error(exc):
-                raise
-            logger.warning("weight measurements failed: %s", exc)
+    with tolerating_failures("weight measurements"):
+        weights = client.get_measurements("Weight", window_start)
+        for day, value in weights.items():
+            if day >= window_start:
+                store.upsert_nutrition(day.isoformat(), weight=float(value))
 
-    store.mark_synced()
+    store.mark_synced(today)
