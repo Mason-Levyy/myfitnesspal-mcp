@@ -96,14 +96,54 @@ def test_diary_entries_map_meals(client):
     ]
 
 
-def test_find_entry_scoped_by_meal():
+def test_find_entries_scoped_by_meal():
     entries = [
         {"entry_id": "1", "meal": "breakfast", "name": "Banana"},
         {"entry_id": "2", "meal": "lunch", "name": "Banana Bread"},
     ]
-    assert diary.find_entry(entries, "banana", None)["entry_id"] == "1"
-    assert diary.find_entry(entries, "banana", "lunch")["entry_id"] == "2"
-    assert diary.find_entry(entries, "kale", None) is None
+    assert [e["entry_id"] for e in diary.find_entries(entries, "banana")] == ["1", "2"]
+    assert [e["entry_id"] for e in diary.find_entries(entries, "banana", "lunch")] == ["2"]
+    assert diary.find_entries(entries, "kale") == []
+
+
+def test_find_entries_accepts_singular_snack_alias():
+    entries = [{"entry_id": "1", "meal": "snacks", "name": "Cherries"}]
+    assert [e["entry_id"] for e in diary.find_entries(entries, "cherries", "snack")] == ["1"]
+    assert [e["entry_id"] for e in diary.find_entries(entries, "cherries", "Snack")] == ["1"]
+
+
+def test_resolve_entry_returns_single_substring_match():
+    entries = [{"entry_id": "1", "meal": "breakfast", "name": "Banana"}]
+    entry = diary.resolve_entry(entries, "banana", None, TODAY)
+    assert entry["entry_id"] == "1"
+
+
+def test_resolve_entry_exact_match_wins_over_substring():
+    entries = [
+        {"entry_id": "1", "meal": "breakfast", "name": "Banana"},
+        {"entry_id": "2", "meal": "breakfast", "name": "Banana Bread"},
+    ]
+    entry = diary.resolve_entry(entries, "Banana", None, TODAY)
+    assert entry["entry_id"] == "1"
+
+
+def test_resolve_entry_raises_ambiguous_when_no_exact_match():
+    entries = [
+        {"entry_id": "1", "meal": "dinner", "name": "Chicken Salad"},
+        {"entry_id": "2", "meal": "dinner", "name": "Chicken Soup"},
+    ]
+    with pytest.raises(diary.AmbiguousEntry) as exc_info:
+        diary.resolve_entry(entries, "chicken", None, TODAY)
+    message = str(exc_info.value)
+    assert "Chicken Salad" in message
+    assert "Chicken Soup" in message
+    assert exc_info.value.candidates == entries
+
+
+def test_resolve_entry_no_match_lists_what_is_actually_logged():
+    entries = [{"entry_id": "1", "meal": "dinner", "name": "Rice"}]
+    with pytest.raises(diary.NoMatchingEntry, match="Rice"):
+        diary.resolve_entry(entries, "beef", "dinner", TODAY)
 
 
 def test_delete_food_removes_match(client):
