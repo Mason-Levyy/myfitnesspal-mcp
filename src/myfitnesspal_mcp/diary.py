@@ -17,6 +17,17 @@ MEAL_INDEX = {"breakfast": "0", "lunch": "1", "dinner": "2", "snacks": "3", "sna
 
 MEALS = ("breakfast", "lunch", "dinner", "snacks")
 
+# Diary page headers always render the plural "Snacks"; normalize the singular
+# alias so meal filtering matches the same names MEAL_INDEX accepts for logging.
+MEAL_ALIASES = {"snack": "snacks"}
+
+
+def _normalize_meal(meal: str | None) -> str | None:
+    if meal is None:
+        return None
+    lowered = meal.lower()
+    return MEAL_ALIASES.get(lowered, lowered)
+
 
 def api_headers(client, extra: dict | None = None) -> dict:
     headers = {
@@ -212,16 +223,16 @@ def diary_entries(doc) -> list[dict]:
     return entries
 
 
-def find_entry(entries: list[dict], query: str, meal: str | None) -> dict | None:
+def _meal_pool(entries: list[dict], meal: str | None) -> list[dict]:
+    target = _normalize_meal(meal)
+    return entries if target is None else [e for e in entries if e["meal"] == target]
+
+
+def find_entries(entries: list[dict], query: str, meal: str | None = None) -> list[dict]:
+    """All diary entries whose name contains `query` (optionally scoped to `meal`),
+    in page order."""
     needle = query.lower()
-    if meal is None:
-        pool = entries
-    else:
-        pool = [e for e in entries if e["meal"] == meal.lower()]
-    for entry in pool:
-        if needle in entry["name"].lower():
-            return entry
-    return None
+    return [e for e in _meal_pool(entries, meal) if needle in e["name"].lower()]
 
 
 def remove_entry(client, entry_id: str, token: str) -> None:
@@ -244,16 +255,50 @@ class NoMatchingEntry(RuntimeError):
     pass
 
 
+class AmbiguousEntry(RuntimeError):
+    """Raised when `query` matches more than one diary entry and none is exact."""
+
+    def __init__(self, query: str, meal: str | None, day: date, candidates: list[dict]):
+        self.candidates = candidates
+        where = f" in {meal}" if meal else ""
+        options = "; ".join(f"{c['name']!r}" for c in candidates)
+        super().__init__(
+            f"'{query}'{where} on {day.isoformat()} matches multiple diary entries: "
+            f"{options}. Use a more specific query to pick one."
+        )
+
+
+def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) -> dict:
+    """Picks the diary entry `query` refers to, or raises with the available
+    options instead of silently guessing.
+
+    An exact (case-insensitive) name match wins outright even when other
+    entries also contain `query` as a substring. Otherwise a single substring
+    match is used; zero or multiple substring matches raise so the caller can
+    retry with a more specific query — surfacing what's actually logged, since
+    the text you'd expect to match (e.g. a cached display name) doesn't always
+    match what's on MFP's live diary page.
+    """
+    candidates = find_entries(entries, query, meal)
+    exact = [c for c in candidates if c["name"].lower() == query.lower()]
+    if len(exact) == 1:
+        return exact[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        raise AmbiguousEntry(query, meal, day, candidates)
+    where = f" in {meal}" if meal else ""
+    pool = _meal_pool(entries, meal)
+    logged = "; ".join(f"{e['name']!r}" for e in pool) if pool else "(nothing logged)"
+    raise NoMatchingEntry(
+        f"no diary entry matching '{query}'{where} on {day.isoformat()}. "
+        f"Entries actually logged{where}: {logged}"
+    )
+
+
 def delete_food(client, day: date, query: str, meal: str | None = None) -> dict:
     doc, token = diary_page(client, day)
-    entry = find_entry(diary_entries(doc), query, meal)
-    if entry is None:
-        where = ""
-        if meal:
-            where = f" in {meal}"
-        raise NoMatchingEntry(
-            f"no diary entry matching '{query}'{where} on {day.isoformat()}"
-        )
+    entry = resolve_entry(diary_entries(doc), query, meal, day)
     remove_entry(client, entry["entry_id"], token)
     return {"removed": entry["name"], "meal": entry["meal"]}
 
