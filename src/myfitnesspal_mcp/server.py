@@ -141,7 +141,11 @@ async def fitness_delete_food(
 ) -> dict:
     """Remove a food from the MyFitnessPal diary by name match.
 
-    query: text matched against logged entry names (e.g. "banana").
+    query: text matched against logged entry names (e.g. "banana"). If this
+    matches nothing, the error lists what's actually logged that day/meal — use
+    that to retry with a better query. If it matches more than one entry (and
+    none is an exact name match), the error lists the candidates; narrow `query`
+    to pick one.
     meal: optional breakfast|lunch|dinner|snacks to disambiguate duplicates.
     date: YYYY-MM-DD (default: today).
     """
@@ -166,7 +170,11 @@ async def fitness_modify_food(
 ) -> dict:
     """Replace a MyFitnessPal diary entry: deletes the match, then adds a food.
 
-    query: the existing entry to replace (name match) within `meal`.
+    query: the existing entry to replace (name match) within `meal`. If this
+    matches nothing, the error lists what's actually logged that day/meal — use
+    that to retry with a better query. If it matches more than one entry (and
+    none is an exact name match), the error lists the candidates; narrow `query`
+    to pick one.
     new_query: the food to add instead; omit to re-add `query` (e.g. to change
     quantity). meal: breakfast|lunch|dinner|snacks. date: YYYY-MM-DD (default: today).
     """
