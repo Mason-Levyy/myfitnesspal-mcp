@@ -76,6 +76,19 @@ def diary_html():
 
 
 @pytest.fixture
+def exercise_html():
+    return (FIXTURES / "exercise.html").read_text()
+
+
+@pytest.fixture
+def exercise_client(exercise_html):
+    fake = FakeClient()
+    fake.session.route("GET", "exercise/diary", FakeResponse(text=exercise_html))
+    fake.session.route("POST", "exercise/remove", FakeResponse(status_code=200))
+    return fake
+
+
+@pytest.fixture
 def client(search_html, diary_html):
     fake = FakeClient()
     fake.session.route("GET", "food/search", FakeResponse(text=search_html))
