@@ -240,3 +240,55 @@ def test_set_weight_posts_v2_items(client, make_response):
     assert kwargs["json"] == {
         "items": [{"type": "Weight", "value": 175.0, "date": "2026-07-08"}]
     }
+
+
+def test_add_water_reads_total_and_posts_new_total(client, make_response):
+    client.session.route(
+        "GET",
+        "food/water",
+        make_response(json_data={"item": {"milliliters": 480}}),
+    )
+    client.session.route("POST", "food/water", make_response(status_code=200))
+
+    result = diary.add_water(client, TODAY, 3, "cup")
+
+    assert result == {
+        "day": "2026-07-08",
+        "added_ml": 720.0,
+        "water_ml": 1200.0,
+        "amount": 3,
+        "unit": "cup",
+    }
+    method, url, kwargs = client.session.calls[-1]
+    assert method == "POST"
+    assert "food/water" in url
+    assert kwargs["data"] == {"milliliters": 1200.0, "date": "2026-07-08"}
+    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
+
+
+@pytest.mark.parametrize(
+    ("amount", "unit", "expected_ml"),
+    [(500, "ml", 500.0), (8, "fl_oz", 236.588)],
+)
+def test_add_water_converts_supported_units(client, make_response, amount, unit, expected_ml):
+    client.session.route(
+        "GET", "food/water", make_response(json_data={"item": {"milliliters": 0}})
+    )
+    client.session.route("POST", "food/water", make_response(status_code=200))
+
+    result = diary.add_water(client, TODAY, amount, unit)
+
+    assert result["added_ml"] == pytest.approx(expected_ml)
+    assert client.session.calls[-1][2]["data"]["milliliters"] == pytest.approx(expected_ml)
+
+
+def test_add_water_rejects_unknown_unit_before_network_call(client):
+    with pytest.raises(ValueError, match="unit must be one of"):
+        diary.add_water(client, TODAY, 1, "gallon")
+    assert client.session.calls == []
+
+
+def test_add_water_rejects_non_positive_amount_before_network_call(client):
+    with pytest.raises(ValueError, match="amount must be greater than zero"):
+        diary.add_water(client, TODAY, 0, "cup")
+    assert client.session.calls == []

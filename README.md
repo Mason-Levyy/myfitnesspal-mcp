@@ -110,6 +110,7 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_delete_food` | Remove a diary entry by name match |
 | `fitness_modify_food` | Replace an entry (or change its quantity) |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
+| `fitness_log_water` | Add cups, fluid ounces, or milliliters to the real water tracker |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
 | `fitness_get_note` | Read the MyFitnessPal daily diary note (the "Notes" box) for a day |
 | `fitness_log_note` | Write that daily note to MFP (replace, or `append` a new line) |
@@ -125,10 +126,10 @@ Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
 per day — subsequent calls are fast).
 
-Water intake is read-only (it appears in day summaries): MyFitnessPal's water
-*write* isn't exposed on any endpoint we've found — `/food/water` accepts POSTs
-but ignores them. If you capture the real call in your browser, a PR is very
-welcome.
+Water logging reads the day's current total from `/food/water`, adds the requested
+quantity, and posts the new total back to the same endpoint. The separate
+`/stats` request with a `water_logged` event is analytics telemetry; it does not
+persist the water total.
 
 ## Remote / HTTP mode
 
@@ -173,8 +174,8 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
   through with just the NextAuth session cookie.
 - Writes replicate the web app's own XHR calls: the legacy food-search page
   supplies the `food_id`/`weight_id` that `/food/add` accepts, deletes go
-  through `/food/remove`, and the daily note reads/writes via `/food/note` —
-  each with the page CSRF token.
+  through `/food/remove`, water reads/writes via `/food/water`, and the daily
+  note reads/writes via `/food/note` — each with the page CSRF token.
 - Day summaries, trends, and exports read a local SQLite cache that gap-fills
   missing days. The MyFitnessPal daily note syncs both ways; feel notes are
   local-only.
