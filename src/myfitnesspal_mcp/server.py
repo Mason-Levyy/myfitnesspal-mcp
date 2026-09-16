@@ -222,6 +222,36 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
 
 
 @mcp.tool()
+async def fitness_get_exercise_entries(date: str | None = None, ctx: Context = None) -> dict:
+    """List exercise-diary entries for a day with their entry ids, minutes,
+    and calories. The entry_id is what fitness_delete_exercise matches on.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return {"day": day.isoformat(), "entries": diary.exercise_entries(client, day)}
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
+async def fitness_delete_exercise(date: str, query: str, ctx: Context = None) -> dict:
+    """Delete every exercise entry whose name contains `query` (case-
+    insensitive) from the given day's exercise diary. Garmin's sync tends
+    to log one workout as several rows sharing a generic name ("Aerobics,
+    general"), so this deletes ALL matches and reports each removal with
+    its minutes/calories. Use fitness_get_exercise_entries first to see
+    what will match.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return diary.delete_exercise(client, day, query)
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
 async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal daily diary note (the free-text 'Notes' box at the
     bottom of the day) straight from your account.

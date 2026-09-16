@@ -394,3 +394,82 @@ def get_exercise(client, day: date) -> dict:
     for section in client._get_exercises(day):
         sections[section.name.lower()] = section.get_as_list()
     return {"day": day.isoformat(), "exercise": sections}
+
+
+def exercise_entries(client, day: date) -> list[dict]:
+    """Cardio/strength exercise entries for a day, each with the delete id
+    MFP's web UI uses (/exercise/remove/{id})."""
+    url = parse.urljoin(
+        client.BASE_URL_SECURE,
+        f"exercise/diary?date={day.isoformat()}",
+    )
+    resp = client.session.get(url, headers=api_headers(client))
+    resp.raise_for_status()
+    doc = lh.fromstring(resp.text)
+    entries = []
+    for tr in doc.xpath("//tr"):
+        name_anchor = tr.xpath(".//div[@class='exercise-description']/a")
+        links = tr.xpath(".//td[contains(@class,'delete')]/a/@href")
+        if not name_anchor or not links:
+            continue
+        entry_id = links[0].rstrip("/").split("/")[-1].split("?")[0]
+        tds = tr.xpath("./td")
+        def _num(idx):
+            try:
+                return float(tds[idx].text_content().strip().replace(",", ""))
+            except (IndexError, ValueError):
+                return None
+        entries.append(
+            {
+                "entry_id": entry_id,
+                "name": name_anchor[0].text_content().strip(),
+                "minutes": _num(1),
+                "calories": _num(2),
+            }
+        )
+    return entries
+
+
+def remove_exercise_entry(client, entry_id: str, token: str) -> None:
+    resp = client.session.post(
+        parse.urljoin(client.BASE_URL_SECURE, f"exercise/remove/{entry_id}"),
+        data={"_method": "delete", "authenticity_token": token},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://www.myfitnesspal.com",
+            "Referer": parse.urljoin(
+                client.BASE_URL_SECURE, "exercise/diary"
+            ),
+        },
+    )
+    if resp.status_code not in (200, 204):
+        raise RuntimeError(f"MyFitnessPal /exercise/remove returned HTTP {resp.status_code}")
+
+
+def exercise_page(client, day: date):
+    url = parse.urljoin(
+        client.BASE_URL_SECURE,
+        f"exercise/diary?date={day.isoformat()}",
+    )
+    resp = client.session.get(url, headers=api_headers(client))
+    resp.raise_for_status()
+    doc = lh.fromstring(resp.text)
+    tokens = doc.xpath("//meta[@name='csrf-token']/@content")
+    if not tokens:
+        raise RuntimeError("couldn't read the MyFitnessPal csrf token")
+    return doc, tokens[0]
+
+
+def delete_exercise(client, day: date, query: str) -> dict:
+    """Delete every exercise entry whose name contains `query` (case-
+    insensitive). Returns what was removed — Garmin's sync splits one
+    workout into several rows with the same junk name, so delete-all-
+    matches is the common case for cleanup automation."""
+    doc, token = exercise_page(client, day)
+    removed = []
+    for e in exercise_entries(client, day):
+        if query.lower() in e["name"].lower():
+            remove_exercise_entry(client, e["entry_id"], token)
+            removed.append({"removed": e["name"], "entry_id": e["entry_id"],
+                            "minutes": e["minutes"], "calories": e["calories"]})
+    return {"day": day.isoformat(), "removed": removed, "count": len(removed)}
