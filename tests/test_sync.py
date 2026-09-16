@@ -142,6 +142,7 @@ def test_poll_backfills_weight_for_already_cached_day(store):
     yesterday = TODAY - datetime.timedelta(days=1)
     for day in (window_start, yesterday):
         store.upsert_nutrition(day.isoformat(), calories=2000.0)
+        store.mark_diary_synced(day.isoformat())
 
     client = FakeSyncClient()
     client.weights = {yesterday: 79.5}
@@ -150,6 +151,48 @@ def test_poll_backfills_weight_for_already_cached_day(store):
     assert client.fetched == [TODAY]
     assert client.measurements_earliest == window_start
     assert store.nutrition(yesterday.isoformat())["weight"] == 79.5
+
+
+def test_poll_fetches_past_day_that_only_has_a_weigh_in(store):
+    """`fitness_log_weight` on a past date writes a weight-only row. Gap-fill
+    must still fetch that day's diary rather than treat the row as cached."""
+    yesterday = TODAY - datetime.timedelta(days=1)
+    store.upsert_nutrition(yesterday.isoformat(), weight=80.0)
+
+    client = FakeSyncClient()
+    sync.poll(store, client, days=2, force=True, today=TODAY)
+
+    assert client.fetched == [TODAY, yesterday]
+    nutrition = store.nutrition(yesterday.isoformat())
+    assert nutrition["calories"] == 2100.0
+    assert nutrition["weight"] == 80.0
+
+
+def test_poll_retries_day_whose_fetch_failed(store):
+    """A transient failure in refresh_day followed by the weight backfill used
+    to leave a weight-only row that blocked every later gap-fill."""
+    yesterday = TODAY - datetime.timedelta(days=1)
+
+    class FlakyClient(FakeSyncClient):
+        def __init__(self):
+            super().__init__()
+            self.failing = {yesterday}
+
+        def get_date(self, day):
+            if day in self.failing:
+                raise RuntimeError("MFP returned 502")
+            return super().get_date(day)
+
+    client = FlakyClient()
+    client.weights = {yesterday: 80.0}
+    sync.poll(store, client, days=2, force=True, today=TODAY)
+    assert store.nutrition(yesterday.isoformat())["calories"] is None
+
+    client.failing.clear()
+    client.fetched.clear()
+    sync.poll(store, client, days=2, force=True, today=TODAY)
+    assert yesterday in client.fetched
+    assert store.nutrition(yesterday.isoformat())["calories"] == 2100.0
 
 
 def test_poll_propagates_auth_errors(store):

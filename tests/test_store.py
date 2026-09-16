@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 
@@ -64,10 +66,54 @@ def test_trend_unknown_metric(store):
         store.trend("steps", "2026-07-01", "2026-07-31")
 
 
-def test_days_with_nutrition(store):
-    store.upsert_nutrition("2026-07-01", calories=1.0)
-    store.upsert_nutrition("2026-07-05", calories=1.0)
-    assert store.days_with_nutrition("2026-07-01", "2026-07-04") == {"2026-07-01"}
+def test_days_with_synced_diary(store):
+    store.mark_diary_synced("2026-07-01")
+    store.mark_diary_synced("2026-07-05")
+    assert store.days_with_synced_diary("2026-07-01", "2026-07-04") == {"2026-07-01"}
+
+
+def test_partial_row_is_not_a_synced_diary(store):
+    """A weigh-in creates a row before the diary is ever fetched; that row must
+    not hide the day from gap-fill."""
+    store.upsert_nutrition("2026-07-01", weight=80.0)
+    assert store.days_with_synced_diary("2026-07-01", "2026-07-01") == set()
+
+    store.mark_diary_synced("2026-07-01")
+    store.upsert_nutrition("2026-07-01", weight=79.5)
+    assert store.days_with_synced_diary("2026-07-01", "2026-07-01") == {"2026-07-01"}
+
+
+def test_nutrition_hides_sync_bookkeeping(store):
+    store.upsert_nutrition("2026-07-01", calories=1800.0)
+    store.mark_diary_synced("2026-07-01")
+    assert "diary_synced" not in store.nutrition("2026-07-01")
+
+
+def test_migrates_pre_diary_synced_database(tmp_path):
+    from myfitnesspal_mcp.store import Store
+
+    path = tmp_path / "old.db"
+    legacy = sqlite3.connect(str(path))
+    legacy.executescript(
+        """
+        CREATE TABLE day_nutrition (
+            day TEXT PRIMARY KEY, calories REAL, protein REAL, carbs REAL,
+            fat REAL, water_ml REAL, weight REAL, goal_calories REAL
+        );
+        INSERT INTO day_nutrition (day, calories) VALUES ('2026-07-01', 2000.0);
+        INSERT INTO day_nutrition (day, water_ml) VALUES ('2026-07-02', 500.0);
+        INSERT INTO day_nutrition (day, weight) VALUES ('2026-07-03', 80.0);
+        """
+    )
+    legacy.commit()
+    legacy.close()
+
+    store = Store(path)
+    assert store.days_with_synced_diary("2026-07-01", "2026-07-03") == {
+        "2026-07-01",
+        "2026-07-02",
+    }
+    assert store.nutrition("2026-07-03")["weight"] == 80.0
 
 
 def test_export_range_unions_sources(store):

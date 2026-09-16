@@ -40,7 +40,7 @@ def first_number(values: dict, *keys) -> float | None:
 
 def days_to_fetch(cached: set[str], lookback: int, today: date) -> list[date]:
     """Today is always refetched because the diary is live; past days only when
-    the cache has no row for them."""
+    the cache has not synced their diary yet."""
     past = (today - timedelta(days=offset) for offset in range(1, lookback))
     return [today] + [day for day in past if day.isoformat() not in cached]
 
@@ -77,6 +77,8 @@ def refresh_day(store: Store, client, day: date) -> None:
     with tolerating_failures(f"note fetch for {day}"):
         store.set_note(key, diary.get_note(client, day))
 
+    store.mark_diary_synced(key)
+
 
 def poll(
     store: Store,
@@ -91,7 +93,7 @@ def poll(
 
     lookback = days or config.sync_days()
     window_start = today - timedelta(days=lookback - 1)
-    cached = store.days_with_nutrition(
+    cached = store.days_with_synced_diary(
         window_start.isoformat(), (today - timedelta(days=1)).isoformat()
     )
 

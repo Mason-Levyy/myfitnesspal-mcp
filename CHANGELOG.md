@@ -13,6 +13,15 @@ All notable changes to this project are documented here. The format follows
 - Ruff lint and format checks in CI, with a `pre-commit` config.
 - Dependabot for GitHub Actions and Python dependencies.
 
+### Fixed
+
+- Gap-fill now keys off an explicit `diary_synced` flag instead of row
+  existence. Previously a weight-only row (from `fitness_log_weight` on a past
+  date, or from the weigh-in backfill after a failed day fetch) made sync treat
+  that day as cached, so its calories and macros were never fetched. Existing
+  databases are migrated on first open; weight-only rows are refetched on the
+  next sync.
+
 ## [0.3.0] - 2026-07-26
 
 ### Changed
