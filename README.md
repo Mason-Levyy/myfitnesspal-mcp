@@ -1,5 +1,10 @@
 # myfitnesspal-mcp
 
+[![CI](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mfp-mcp)](https://pypi.org/project/mfp-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/mfp-mcp)](https://pypi.org/project/mfp-mcp/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
 the food database with macros, track trends, and export your nutrition history, all against your real MyFitnessPal diary.
 
@@ -184,7 +189,16 @@ uv run pytest
 ```
 
 Tests run against synthetic MyFitnessPal HTML/JSON fixtures — no account
-needed.
+needed. Lint and formatting are enforced with `ruff` (`uv run ruff check .`,
+`uv run ruff format .`).
+
+## Contributing
+
+Issues and pull requests are welcome, especially endpoint captures when
+MyFitnessPal changes something. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+setup, style, and the PR checklist, and [SECURITY.md](SECURITY.md) for how to
+report vulnerabilities privately. Release history is in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
