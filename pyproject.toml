@@ -13,7 +13,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "mcp>=1.10,<2",
+    "mcp>=1.10,<3",
     "myfitnesspal==2.1.2",
     "curl-cffi>=0.15,<0.16",
     "lxml>=5,<6",
