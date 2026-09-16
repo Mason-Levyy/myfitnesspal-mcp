@@ -12,9 +12,14 @@ updates:
     schedule:
       interval: monthly
     labels: ["dependencies"]
-    # Pinned on purpose: myfitnesspal is parsed by version-specific code and
-    # curl-cffi's impersonation targets change between minors. Bump by hand.
+    # Bumped by hand, on purpose:
+    # - myfitnesspal is parsed by version-specific code.
+    # - curl-cffi minors swap the bundled curl-impersonate, changing the TLS
+    #   fingerprint MFP sees; nothing in CI exercises the network.
+    # - mcp majors need a real 2.x test run; myfitnesspal's typing-extensions
+    #   pin currently masks them from the resolver, so a green CI proves nothing.
     ignore:
       - dependency-name: myfitnesspal
       - dependency-name: curl-cffi
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]
