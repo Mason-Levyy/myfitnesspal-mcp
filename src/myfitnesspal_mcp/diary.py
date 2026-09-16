@@ -13,7 +13,13 @@ from urllib import parse
 
 from lxml import html as lh
 
-MEAL_INDEX = {"breakfast": "0", "lunch": "1", "dinner": "2", "snacks": "3", "snack": "3"}
+MEAL_INDEX = {
+    "breakfast": "0",
+    "lunch": "1",
+    "dinner": "2",
+    "snacks": "3",
+    "snack": "3",
+}
 
 MEALS = ("breakfast", "lunch", "dinner", "snacks")
 
@@ -40,7 +46,11 @@ def api_headers(client, extra: dict | None = None) -> dict:
 
 
 def _result_extras(anchor) -> dict:
-    extras = {"external_id": anchor.get("data-external-id"), "brand": None, "calories": None}
+    extras = {
+        "external_id": anchor.get("data-external-id"),
+        "brand": None,
+        "calories": None,
+    }
     containers = anchor.xpath("ancestor::li[1]")
     if not containers:
         return extras
@@ -95,7 +105,9 @@ def _serving_label(serving_sizes: list) -> str | None:
     return f"{first.get('value')} {first.get('unit')}".strip()
 
 
-def search_food(client, query: str, limit: int = 5, with_macros: bool = True) -> list[dict]:
+def search_food(
+    client, query: str, limit: int = 5, with_macros: bool = True
+) -> list[dict]:
     results, _ = food_search(client, query)
     candidates = []
     for result in results[:limit]:
@@ -226,7 +238,9 @@ def _meal_pool(entries: list[dict], meal: str | None) -> list[dict]:
     return entries if target is None else [e for e in entries if e["meal"] == target]
 
 
-def find_entries(entries: list[dict], query: str, meal: str | None = None) -> list[dict]:
+def find_entries(
+    entries: list[dict], query: str, meal: str | None = None
+) -> list[dict]:
     needle = query.lower()
     return [e for e in _meal_pool(entries, meal) if needle in e["name"].lower()]
 
@@ -244,7 +258,9 @@ def remove_entry(client, entry_id: str, token: str) -> None:
         },
     )
     if resp.status_code not in (200, 204):
-        raise RuntimeError(f"MyFitnessPal /food/remove returned HTTP {resp.status_code}")
+        raise RuntimeError(
+            f"MyFitnessPal /food/remove returned HTTP {resp.status_code}"
+        )
 
 
 class NoMatchingEntry(RuntimeError):
@@ -325,8 +341,7 @@ def get_note(client, day: date) -> str | None:
     the food diary). MFP stores the body double-HTML-encoded; returns the
     decoded text, or None when the day has no note."""
     url = (
-        parse.urljoin(client.BASE_URL_SECURE, "food/note")
-        + f"?date={day.isoformat()}"
+        parse.urljoin(client.BASE_URL_SECURE, "food/note") + f"?date={day.isoformat()}"
     )
     resp = client.session.get(
         url, headers=api_headers(client, {"Accept": "application/json"})
