@@ -320,6 +320,47 @@ def set_weight(client, day: date, value: float) -> dict:
     return {"day": item["date"], "weight": item["value"], "unit": item.get("unit")}
 
 
+def add_water(client, day: date, amount: float, unit: str = "cup") -> dict:
+    """Add water to a day's existing total using MFP's web diary endpoint."""
+    ml_per_unit = {"ml": 1.0, "cup": 240.0, "fl_oz": 29.5735}
+    unit = unit.lower()
+    if unit not in ml_per_unit:
+        raise ValueError("unit must be one of: ml, cup, fl_oz")
+    if amount <= 0:
+        raise ValueError("amount must be greater than zero")
+
+    url = parse.urljoin(client.BASE_URL_SECURE, "food/water")
+    resp = client.session.get(
+        f"{url}?date={day.isoformat()}",
+        headers=api_headers(client, {"Accept": "application/json"}),
+    )
+    resp.raise_for_status()
+    current_ml = float(resp.json()["item"]["milliliters"])
+    added_ml = float(amount) * ml_per_unit[unit]
+    water_ml = current_ml + added_ml
+    _, csrf = diary_page(client, day)
+    resp = client.session.post(
+        url,
+        data={"milliliters": water_ml, "date": day.isoformat()},
+        headers=api_headers(
+            client,
+            {
+                "X-CSRF-Token": csrf,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            },
+        ),
+    )
+    if resp.status_code not in (200, 201, 204):
+        raise RuntimeError(f"MyFitnessPal /food/water returned HTTP {resp.status_code}")
+    return {
+        "day": day.isoformat(),
+        "added_ml": added_ml,
+        "water_ml": water_ml,
+        "amount": amount,
+        "unit": unit,
+    }
+
+
 def get_note(client, day: date) -> str | None:
     """Reads the day's free-text diary note (the 'Notes' box at the bottom of
     the food diary). MFP stores the body double-HTML-encoded; returns the

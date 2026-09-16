@@ -120,3 +120,21 @@ def test_bulk_export_reads_cache_without_client(local_store):
     )
     assert result["count"] == 1
     assert result["days"][0]["nutrition"]["calories"] == 1500.0
+
+
+def test_log_water_tool_updates_remote_and_local_total(
+    local_store, client, make_response, monkeypatch
+):
+    client.session.route(
+        "GET", "food/water", make_response(json_data={"item": {"milliliters": 480}})
+    )
+    client.session.route("POST", "food/water", make_response(status_code=200))
+    monkeypatch.setattr(server.mfp_client, "get_client", lambda: client)
+
+    result = asyncio.run(
+        server.fitness_log_water(amount=3, unit="cup", date="2026-07-08")
+    )
+
+    assert result["ok"] is True
+    assert result["water_ml"] == 1200.0
+    assert local_store.day_record("2026-07-08")["nutrition"]["water_ml"] == 1200.0
