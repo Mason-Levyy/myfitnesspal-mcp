@@ -25,13 +25,15 @@ autorefresh = ["playwright>=1.40"]
 
 [project.urls]
 Repository = "https://github.com/Mason-Levyy/myfitnesspal-mcp"
+Changelog = "https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Mason-Levyy/myfitnesspal-mcp/issues"
 
 [project.scripts]
 mfp-mcp = "myfitnesspal_mcp.cli:main"
 myfitnesspal-mcp = "myfitnesspal_mcp.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.16", "pre-commit>=4"]
 
 [build-system]
 requires = ["hatchling"]
@@ -42,3 +44,19 @@ packages = ["src/myfitnesspal_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = [".venv*"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+]
+# Formatter handles line length; long string literals and URLs are fine.
+ignore = ["E501"]

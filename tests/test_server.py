@@ -26,7 +26,9 @@ def test_is_auth_error_patterns():
 
 def test_run_with_refresh_retries_auth_failures(monkeypatch):
     refreshed = []
-    monkeypatch.setattr(server.refresh, "refresh_session", lambda: refreshed.append(True))
+    monkeypatch.setattr(
+        server.refresh, "refresh_session", lambda: refreshed.append(True)
+    )
 
     attempts = []
 

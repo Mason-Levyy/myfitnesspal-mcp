@@ -16,7 +16,9 @@ def test_upsert_nutrition_rejects_unknown_fields(store):
 
 
 def test_replace_diary(store):
-    store.replace_diary("2026-07-01", [{"meal": "Breakfast", "name": "Egg", "calories": 70}])
+    store.replace_diary(
+        "2026-07-01", [{"meal": "Breakfast", "name": "Egg", "calories": 70}]
+    )
     store.replace_diary(
         "2026-07-01",
         [

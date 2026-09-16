@@ -1,6 +1,7 @@
 import asyncio
 import datetime
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -65,9 +66,7 @@ async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
 async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
     """Runs `op` against the store and a live MFP client, re-resolving both on
     the retry so a refreshed session is picked up."""
-    return await run_with_refresh(
-        ctx, lambda: op(get_store(), mfp_client.get_client())
-    )
+    return await run_with_refresh(ctx, lambda: op(get_store(), mfp_client.get_client()))
 
 
 @mcp.tool()
@@ -298,7 +297,9 @@ async def fitness_get_trends(
 
 @mcp.tool()
 async def fitness_bulk_export(
-    start: str | None = None, end: str | None = None, sync_first: bool = False,
+    start: str | None = None,
+    end: str | None = None,
+    sync_first: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Export a whole date range at once for analysis: per-day nutrition
