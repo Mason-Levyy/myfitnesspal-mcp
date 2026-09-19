@@ -121,6 +121,14 @@ The high-accuracy logging flow: `fitness_search_food("greek yogurt")` returns
 candidates with macros and a `food_id`/`weight_id`; pass those to
 `fitness_log_food` to log exactly that item instead of trusting the top match.
 
+`fitness_log_food`, `fitness_delete_food`, and `fitness_modify_food` all take
+a `meal` argument the same way: `breakfast`/`lunch`/`dinner`/`snacks`, or the
+literal name of any meal section currently on your diary — including a
+renamed default meal or one of the up to two extra meals MyFitnessPal lets
+you add in Diary Settings. Matching is case-insensitive against your
+account's current meal labels; an unrecognized `meal` raises an error
+instead of silently logging into the wrong section.
+
 Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
 per day — subsequent calls are fast).

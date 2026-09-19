@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from lxml import html as lh
 
 from myfitnesspal_mcp import diary
 
@@ -83,6 +84,88 @@ def test_push_food_no_results(client, make_response):
     )
     with pytest.raises(RuntimeError, match="no MyFitnessPal food found"):
         diary.push_food(client, TODAY, "breakfast", "unobtainium")
+
+
+def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
+    client, custom_meals_diary_html, make_response
+):
+    """MFP lets an account have up to 6 meal sections (4 default + 2 extra).
+    Meals 5 and 6 have no keyword — only their literal, possibly-custom name
+    reaches them. This must work identically to how fitness_delete_food /
+    fitness_modify_food already resolve custom meal names."""
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    result = diary.push_food(client, TODAY, "Snacks/Misc", "banana")
+    assert result == {"matched": "Banana", "food_id": "111"}
+    method, url, kwargs = client.session.calls[-1]
+    assert method == "POST"
+    assert "food/add" in url
+    assert kwargs["data"]["food_entry[meal_id]"] == "4"
+
+
+def test_push_food_resolves_sixth_custom_meal_case_insensitively(
+    client, custom_meals_diary_html, make_response
+):
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    result = diary.push_food(client, TODAY, "supplements/sauces/spreads", "banana")
+    assert result == {"matched": "Banana", "food_id": "111"}
+    _, _, kwargs = client.session.calls[-1]
+    assert kwargs["data"]["food_entry[meal_id]"] == "5"
+
+
+def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
+    client, custom_meals_diary_html, make_response
+):
+    """A typo or stale keyword must error loudly, not silently log into
+    meal_id 0 the way the old hardcoded MEAL_INDEX.get(meal, "0") did."""
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
+        diary.push_food(client, TODAY, "breakfast", "banana")
+    assert all("food/add" not in url for _, url, _ in client.session.calls)
+
+
+def test_meal_headers_lists_labels_in_document_order(custom_meals_diary_html):
+    doc = lh.fromstring(custom_meals_diary_html)
+    assert diary.meal_headers(doc) == [
+        "Fruits/Veggies/Nuts/Seeds",
+        "Dairy/Eggs",
+        "Meat",
+        "Grains/Cereal/Breads/Potatoes",
+        "Snacks/Misc",
+        "Supplements/Sauces/Spreads",
+    ]
+
+
+def test_resolve_meal_id_matches_default_labels(diary_html):
+    doc = lh.fromstring(diary_html)
+    assert diary.resolve_meal_id(doc, "breakfast") == "0"
+    assert diary.resolve_meal_id(doc, "SNACKS") == "3"
+
+
+def test_resolve_meal_id_matches_renamed_and_extra_custom_meals(
+    custom_meals_diary_html,
+):
+    doc = lh.fromstring(custom_meals_diary_html)
+    assert diary.resolve_meal_id(doc, "Meat") == "2"
+    assert diary.resolve_meal_id(doc, "snacks/misc") == "4"
+    assert diary.resolve_meal_id(doc, "Supplements/Sauces/Spreads") == "5"
+
+
+def test_resolve_meal_id_raises_with_available_meals_when_unmatched(
+    custom_meals_diary_html,
+):
+    doc = lh.fromstring(custom_meals_diary_html)
+    with pytest.raises(diary.UnknownMeal) as exc_info:
+        diary.resolve_meal_id(doc, "breakfast")
+    message = str(exc_info.value)
+    assert "breakfast" in message
+    assert "Fruits/Veggies/Nuts/Seeds" in message
+    assert "Supplements/Sauces/Spreads" in message
 
 
 def test_diary_entries_map_meals(client):

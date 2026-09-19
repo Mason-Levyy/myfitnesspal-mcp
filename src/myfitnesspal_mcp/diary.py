@@ -13,16 +13,6 @@ from urllib import parse
 
 from lxml import html as lh
 
-MEAL_INDEX = {
-    "breakfast": "0",
-    "lunch": "1",
-    "dinner": "2",
-    "snacks": "3",
-    "snack": "3",
-}
-
-MEALS = ("breakfast", "lunch", "dinner", "snacks")
-
 MEAL_ALIASES = {"snack": "snacks"}
 
 
@@ -31,6 +21,47 @@ def _normalize_meal(meal: str | None) -> str | None:
         return None
     lowered = meal.lower()
     return MEAL_ALIASES.get(lowered, lowered)
+
+
+class UnknownMeal(RuntimeError):
+    pass
+
+
+def _row_text(tr) -> str | None:
+    text = " ".join(t.strip() for t in tr.xpath(".//text()") if t.strip())
+    return text or None
+
+
+def meal_headers(doc) -> list[str]:
+    """The account's current meal section labels, in the same top-to-bottom
+    order MFP renders them — which is also the order food/add's meal_id
+    indexes (0-based), including any custom meals beyond the default four."""
+    headers = []
+    for tr in doc.xpath("//tr"):
+        classes = tr.get("class") or ""
+        if "meal_header" in classes:
+            text = _row_text(tr)
+            if text:
+                headers.append(text)
+    return headers
+
+
+def resolve_meal_id(doc, meal: str) -> str:
+    """Resolves a meal name to MFP's 0-based meal_id by matching it
+    (case-insensitively) against the account's current meal labels scraped
+    off the diary page. Works for the default breakfast/lunch/dinner/snacks
+    as well as any renamed or additional custom meal — the same literal-name
+    matching fitness_delete_food/fitness_modify_food already use. Raises
+    instead of silently falling back to meal_id 0 when nothing matches."""
+    target = _normalize_meal(meal)
+    headers = meal_headers(doc)
+    for index, header in enumerate(headers):
+        if _normalize_meal(header) == target:
+            return str(index)
+    available = ", ".join(headers) if headers else "(none found on diary page)"
+    raise UnknownMeal(
+        f"no MyFitnessPal meal named {meal!r}. Configured meals: {available}"
+    )
 
 
 def api_headers(client, extra: dict | None = None) -> dict:
@@ -139,7 +170,9 @@ def search_food(
     return candidates
 
 
-def add_food_to_diary(client, food_id, weight_id, csrf, meal: str, day: date, quantity):
+def add_food_to_diary(
+    client, food_id, weight_id, csrf, meal_id: str, day: date, quantity
+):
     resp = client.session.post(
         parse.urljoin(client.BASE_URL_SECURE, "food/add"),
         data={
@@ -147,7 +180,7 @@ def add_food_to_diary(client, food_id, weight_id, csrf, meal: str, day: date, qu
             "food_entry[date]": day.isoformat(),
             "food_entry[quantity]": str(quantity),
             "food_entry[weight_id]": str(weight_id),
-            "food_entry[meal_id]": MEAL_INDEX.get(meal.lower(), "0"),
+            "food_entry[meal_id]": meal_id,
             "ajax": "true",
         },
         headers=api_headers(
@@ -174,8 +207,10 @@ def push_food(
     food_id: str | None = None,
     weight_id: str | None = None,
 ) -> dict:
+    doc, diary_csrf = diary_page(client, day)
+    meal_id = resolve_meal_id(doc, meal)
     if food_id is not None and weight_id is not None:
-        _, csrf = diary_page(client, day)
+        csrf = diary_csrf
         matched = query
     else:
         results, csrf = food_search(client, query)
@@ -189,7 +224,7 @@ def push_food(
         raise RuntimeError(
             "couldn't read the MyFitnessPal csrf token (try re-authenticating)"
         )
-    add_food_to_diary(client, food_id, weight_id, csrf, meal, day, quantity)
+    add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
     return {"matched": matched, "food_id": food_id}
 
 
@@ -208,18 +243,15 @@ def diary_page(client, day: date):
 
 
 def diary_entries(doc) -> list[dict]:
-    """Walks the diary table: meal_header rows delimit meals; the
+    """Walks the diary table: meal_header rows delimit meals (the full label
+    text, normalized the same way resolve_meal_id matches it); the
     data-food-entry-id anchors that follow belong to that meal."""
     entries = []
     current_meal = None
     for tr in doc.xpath("//tr"):
         classes = tr.get("class") or ""
         if "meal_header" in classes:
-            header = " ".join(t.strip() for t in tr.xpath(".//text()") if t.strip())
-            if header:
-                current_meal = header.split()[0].lower()
-            else:
-                current_meal = None
+            current_meal = _normalize_meal(_row_text(tr))
             continue
         anchors = tr.xpath(".//a[@data-food-entry-id]")
         if anchors:

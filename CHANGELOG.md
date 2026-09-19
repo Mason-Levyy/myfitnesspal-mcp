@@ -21,6 +21,14 @@ All notable changes to this project are documented here. The format follows
   that day as cached, so its calories and macros were never fetched. Existing
   databases are migrated on first open; weight-only rows are refetched on the
   next sync.
+- `fitness_log_food`'s `meal` argument now resolves against the account's
+  actual current meal labels (scraped off the diary page), the same way
+  `fitness_delete_food`/`fitness_modify_food` already matched entries. It
+  previously only recognized the literal keywords `breakfast`/`lunch`/
+  `dinner`/`snacks` via a hardcoded 0-3 index and silently fell back to
+  meal_id 0 for anything else — misfiling entries for accounts with renamed
+  meals or the up to two extra custom meals MyFitnessPal allows. An
+  unresolvable `meal` now raises instead of defaulting to meal 0.
 
 ## [0.3.0] - 2026-07-26
 
