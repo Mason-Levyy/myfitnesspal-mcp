@@ -15,6 +15,8 @@ from lxml import html as lh
 
 MEAL_ALIASES = {"snack": "snacks"}
 
+DEFAULT_MEAL_POSITIONS = {"breakfast": 0, "lunch": 1, "dinner": 2, "snacks": 3}
+
 
 def _normalize_meal(meal: str | None) -> str | None:
     if meal is None:
@@ -47,11 +49,16 @@ def meal_headers(doc) -> list[str]:
 
 
 def resolve_meal_id(doc, meal: str) -> str:
+    """Matches `meal` against the diary's current meal labels; the default
+    keywords still reach meals 1-4 on accounts that renamed them."""
     target = _normalize_meal(meal)
     headers = meal_headers(doc)
     for index, header in enumerate(headers):
         if _normalize_meal(header) == target:
             return str(index)
+    default_position = DEFAULT_MEAL_POSITIONS.get(target)
+    if default_position is not None and default_position < len(headers):
+        return str(default_position)
     available = ", ".join(headers) if headers else "(none found on diary page)"
     raise UnknownMeal(
         f"no MyFitnessPal meal named {meal!r}. Configured meals: {available}"
@@ -321,9 +328,16 @@ def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) 
     )
 
 
+def meal_label(doc, meal: str) -> str:
+    """The diary's own (normalized) label for `meal`, resolved the same way
+    as food/add's meal_id, so delete filters and adds always agree."""
+    return _normalize_meal(meal_headers(doc)[int(resolve_meal_id(doc, meal))])
+
+
 def delete_food(client, day: date, query: str, meal: str | None = None) -> dict:
     doc, token = diary_page(client, day)
-    entry = resolve_entry(diary_entries(doc), query, meal, day)
+    label = meal_label(doc, meal) if meal else None
+    entry = resolve_entry(diary_entries(doc), query, label, day)
     remove_entry(client, entry["entry_id"], token)
     return {"removed": entry["name"], "meal": entry["meal"]}
 

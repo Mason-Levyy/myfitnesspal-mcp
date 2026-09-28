@@ -125,8 +125,69 @@ def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
-        diary.push_food(client, TODAY, "breakfast", "banana")
+        diary.push_food(client, TODAY, "brunch", "banana")
     assert all("food/add" not in url for _, url, _ in client.session.calls)
+
+
+def test_push_food_default_keyword_reaches_renamed_first_meal(
+    client, custom_meals_diary_html, make_response
+):
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    diary.push_food(client, TODAY, "breakfast", "banana")
+    _, _, kwargs = client.session.calls[-1]
+    assert kwargs["data"]["food_entry[meal_id]"] == "0"
+
+
+def test_resolve_meal_id_falls_back_to_default_positions(custom_meals_diary_html):
+    doc = lh.fromstring(custom_meals_diary_html)
+    assert diary.resolve_meal_id(doc, "breakfast") == "0"
+    assert diary.resolve_meal_id(doc, "Lunch") == "1"
+    assert diary.resolve_meal_id(doc, "dinner") == "2"
+    assert diary.resolve_meal_id(doc, "snack") == "3"
+
+
+def test_resolve_meal_id_prefers_label_over_default_position():
+    doc = lh.fromstring(
+        "<table><tr class='meal_header'><td>Pre-workout</td></tr>"
+        "<tr class='meal_header'><td>Breakfast</td></tr></table>"
+    )
+    assert diary.resolve_meal_id(doc, "breakfast") == "1"
+
+
+def test_resolve_meal_id_default_keyword_beyond_configured_meals():
+    doc = lh.fromstring(
+        "<table><tr class='meal_header'><td>Only meal</td></tr></table>"
+    )
+    with pytest.raises(diary.UnknownMeal, match="Only meal"):
+        diary.resolve_meal_id(doc, "dinner")
+
+
+def test_delete_food_default_keyword_filters_renamed_meal(
+    client, custom_meals_diary_html, make_response
+):
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    result = diary.delete_food(client, TODAY, "banana", "breakfast")
+    assert result == {
+        "removed": "Banana - Fresh, 1 medium",
+        "meal": "fruits/veggies/nuts/seeds",
+    }
+    _, url, _ = client.session.calls[-1]
+    assert url.endswith("food/remove/c1")
+
+
+def test_delete_food_unknown_meal_raises_before_removing(
+    client, custom_meals_diary_html, make_response
+):
+    client.session.route(
+        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+    )
+    with pytest.raises(diary.UnknownMeal):
+        diary.delete_food(client, TODAY, "banana", "brunch")
+    assert all("food/remove" not in url for _, url, _ in client.session.calls)
 
 
 def test_meal_headers_lists_labels_in_document_order(custom_meals_diary_html):
@@ -181,9 +242,9 @@ def test_resolve_meal_id_raises_with_available_meals_when_unmatched(
 ):
     doc = lh.fromstring(custom_meals_diary_html)
     with pytest.raises(diary.UnknownMeal) as exc_info:
-        diary.resolve_meal_id(doc, "breakfast")
+        diary.resolve_meal_id(doc, "brunch")
     message = str(exc_info.value)
-    assert "breakfast" in message
+    assert "brunch" in message
     assert "Fruits/Veggies/Nuts/Seeds" in message
     assert "Supplements/Sauces/Spreads" in message
 

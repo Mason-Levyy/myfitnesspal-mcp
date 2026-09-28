@@ -27,8 +27,9 @@ All notable changes to this project are documented here. The format follows
   previously only recognized the literal keywords `breakfast`/`lunch`/
   `dinner`/`snacks` via a hardcoded 0-3 index and silently fell back to
   meal_id 0 for anything else — misfiling entries for accounts with renamed
-  meals or the up to two extra custom meals MyFitnessPal allows. An
-  unresolvable `meal` now raises instead of defaulting to meal 0.
+  meals or the up to two extra custom meals MyFitnessPal allows. The four
+  keywords still reach the first four meals when those were renamed; any
+  other unresolvable `meal` now raises instead of defaulting to meal 0.
 
 ## [0.3.0] - 2026-07-26
 

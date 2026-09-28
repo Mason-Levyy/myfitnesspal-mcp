@@ -126,8 +126,10 @@ a `meal` argument the same way: `breakfast`/`lunch`/`dinner`/`snacks`, or the
 literal name of any meal section currently on your diary — including a
 renamed default meal or one of the up to two extra meals MyFitnessPal lets
 you add in Diary Settings. Matching is case-insensitive against your
-account's current meal labels; an unrecognized `meal` raises an error
-instead of silently logging into the wrong section.
+account's current meal labels. If you renamed a default meal, the keywords
+still work: `breakfast`/`lunch`/`dinner`/`snacks` fall back to your first
+through fourth meal. Any other unrecognized `meal` raises an error instead
+of silently logging into the wrong section.
 
 Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
