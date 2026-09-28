@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 
 import pytest
@@ -143,3 +144,61 @@ def test_mark_synced_roundtrip(store):
     assert store.last_synced_on() is None
     store.mark_synced()
     assert store.last_synced_on() is not None
+
+
+def test_pin_roundtrip_normalizes_query(store):
+    store.set_pin("  Greek   Yogurt ", "111", "10", "Greek Yogurt", "1 cup")
+    pin = store.pin("greek yogurt")
+    assert pin["food_id"] == "111"
+    assert pin["weight_id"] == "10"
+    assert pin["serving"] == "1 cup"
+    assert pin["query"] == "greek yogurt"
+
+
+def test_pin_overwrites_previous_choice(store):
+    store.set_pin("banana", "111", "10", "Banana", "1 medium")
+    store.set_pin("Banana", "222", "30", "Banana, organic", "1 large")
+    assert [p["food_id"] for p in store.pins()] == ["222"]
+
+
+def test_clear_pin_and_clear_all(store):
+    store.set_pin("banana", "111", "10", "Banana", None)
+    store.set_pin("oats", "333", "40", "Oats", None)
+    assert store.clear_pin("BANANA") is True
+    assert store.clear_pin("banana") is False
+    assert store.pin("banana") is None
+    assert store.clear_pins() == 1
+    assert store.pins() == []
+
+
+def test_draft_roundtrip_and_expiry(store):
+    created = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
+    draft_id = store.save_draft({"query": "banana", "options": [1]}, now=created)
+    later = created + datetime.timedelta(hours=23)
+    assert store.draft(draft_id, now=later) == {"query": "banana", "options": [1]}
+    expired = created + datetime.timedelta(hours=25)
+    assert store.draft(draft_id, now=expired) is None
+    assert store.draft("missing") is None
+
+
+def test_save_draft_purges_expired_drafts(store):
+    created = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
+    old_id = store.save_draft({"query": "old"}, now=created)
+    store.save_draft({"query": "new"}, now=created + datetime.timedelta(days=2))
+    row = store.conn.execute(
+        "SELECT 1 FROM food_draft WHERE draft_id = ?", (old_id,)
+    ).fetchone()
+    assert row is None
+
+
+def test_existing_database_gains_pin_and_draft_tables(tmp_path):
+    from myfitnesspal_mcp.store import Store
+
+    path = tmp_path / "legacy.db"
+    legacy = sqlite3.connect(path)
+    legacy.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+    legacy.commit()
+    legacy.close()
+    store = Store(path)
+    store.set_pin("banana", "111", "10", "Banana", None)
+    assert store.pin("banana")["food_id"] == "111"
