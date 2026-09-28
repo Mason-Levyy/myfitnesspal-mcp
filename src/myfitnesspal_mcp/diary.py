@@ -27,32 +27,26 @@ class UnknownMeal(RuntimeError):
     pass
 
 
-def _row_text(tr) -> str | None:
-    text = " ".join(t.strip() for t in tr.xpath(".//text()") if t.strip())
-    return text or None
+def _meal_label(tr) -> str | None:
+    cells = tr.xpath("./td")
+    if not cells:
+        return None
+    return cells[0].text_content().strip() or None
 
 
 def meal_headers(doc) -> list[str]:
-    """The account's current meal section labels, in the same top-to-bottom
-    order MFP renders them — which is also the order food/add's meal_id
-    indexes (0-based), including any custom meals beyond the default four."""
+    """Meal labels in render order; the index is food/add's meal_id."""
     headers = []
     for tr in doc.xpath("//tr"):
         classes = tr.get("class") or ""
         if "meal_header" in classes:
-            text = _row_text(tr)
-            if text:
-                headers.append(text)
+            label = _meal_label(tr)
+            if label:
+                headers.append(label)
     return headers
 
 
 def resolve_meal_id(doc, meal: str) -> str:
-    """Resolves a meal name to MFP's 0-based meal_id by matching it
-    (case-insensitively) against the account's current meal labels scraped
-    off the diary page. Works for the default breakfast/lunch/dinner/snacks
-    as well as any renamed or additional custom meal — the same literal-name
-    matching fitness_delete_food/fitness_modify_food already use. Raises
-    instead of silently falling back to meal_id 0 when nothing matches."""
     target = _normalize_meal(meal)
     headers = meal_headers(doc)
     for index, header in enumerate(headers):
@@ -213,9 +207,10 @@ def push_food(
         csrf = diary_csrf
         matched = query
     else:
-        results, csrf = food_search(client, query)
+        results, search_csrf = food_search(client, query)
         if not results:
             raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
+        csrf = search_csrf or diary_csrf
         top = results[0]
         food_id = top["food_id"]
         weight_id = top["weight_id"]
@@ -243,15 +238,13 @@ def diary_page(client, day: date):
 
 
 def diary_entries(doc) -> list[dict]:
-    """Walks the diary table: meal_header rows delimit meals (the full label
-    text, normalized the same way resolve_meal_id matches it); the
-    data-food-entry-id anchors that follow belong to that meal."""
+    """Food entries grouped under the preceding meal_header row."""
     entries = []
     current_meal = None
     for tr in doc.xpath("//tr"):
         classes = tr.get("class") or ""
         if "meal_header" in classes:
-            current_meal = _normalize_meal(_row_text(tr))
+            current_meal = _normalize_meal(_meal_label(tr))
             continue
         anchors = tr.xpath(".//a[@data-food-entry-id]")
         if anchors:

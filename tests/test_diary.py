@@ -141,6 +141,26 @@ def test_meal_headers_lists_labels_in_document_order(custom_meals_diary_html):
     ]
 
 
+def test_meal_headers_ignore_nutrient_column_headings(diary_html):
+    doc = lh.fromstring(diary_html)
+    assert diary.meal_headers(doc) == ["Breakfast", "Lunch", "Dinner", "Snacks"]
+
+
+def test_push_food_falls_back_to_diary_csrf_when_search_has_none(client, make_response):
+    client.session.route(
+        "GET",
+        "food/search",
+        make_response(
+            text=client.session.routes[("GET", "food/search")].text.replace(
+                'name="csrf-token"', 'name="unrelated"'
+            )
+        ),
+    )
+    diary.push_food(client, TODAY, "breakfast", "banana")
+    _, _, kwargs = client.session.calls[-1]
+    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
+
+
 def test_resolve_meal_id_matches_default_labels(diary_html):
     doc = lh.fromstring(diary_html)
     assert diary.resolve_meal_id(doc, "breakfast") == "0"
