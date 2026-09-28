@@ -102,14 +102,20 @@ def test_find_entries_scoped_by_meal():
         {"entry_id": "2", "meal": "lunch", "name": "Banana Bread"},
     ]
     assert [e["entry_id"] for e in diary.find_entries(entries, "banana")] == ["1", "2"]
-    assert [e["entry_id"] for e in diary.find_entries(entries, "banana", "lunch")] == ["2"]
+    assert [e["entry_id"] for e in diary.find_entries(entries, "banana", "lunch")] == [
+        "2"
+    ]
     assert diary.find_entries(entries, "kale") == []
 
 
 def test_find_entries_accepts_singular_snack_alias():
     entries = [{"entry_id": "1", "meal": "snacks", "name": "Cherries"}]
-    assert [e["entry_id"] for e in diary.find_entries(entries, "cherries", "snack")] == ["1"]
-    assert [e["entry_id"] for e in diary.find_entries(entries, "cherries", "Snack")] == ["1"]
+    assert [
+        e["entry_id"] for e in diary.find_entries(entries, "cherries", "snack")
+    ] == ["1"]
+    assert [
+        e["entry_id"] for e in diary.find_entries(entries, "cherries", "Snack")
+    ] == ["1"]
 
 
 def test_resolve_entry_returns_single_substring_match():
@@ -162,7 +168,11 @@ def test_delete_food_no_match(client):
 
 def test_modify_food_deletes_then_adds(client):
     result = diary.modify_food(client, TODAY, "breakfast", "coffee", "banana")
-    assert result == {"removed": "Coffee, 1 cup", "added": "Banana", "meal": "breakfast"}
+    assert result == {
+        "removed": "Coffee, 1 cup",
+        "added": "Banana",
+        "meal": "breakfast",
+    }
 
 
 def test_get_note_double_unescapes_body(client, make_response):
@@ -213,7 +223,12 @@ def test_set_weight_posts_v2_items(client, make_response):
             status_code=200,
             json_data={
                 "items": [
-                    {"type": "Weight", "value": 175.0, "date": "2026-07-08", "unit": "pounds"}
+                    {
+                        "type": "Weight",
+                        "value": 175.0,
+                        "date": "2026-07-08",
+                        "unit": "pounds",
+                    }
                 ]
             },
         ),

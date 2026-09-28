@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a new tool, option, or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the workflow you want and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A new `fitness_*` tool, a change to an existing one, a config option, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: endpoint
+    attributes:
+      label: MyFitnessPal endpoint details (if known)
+      description: |
+        If this needs a new MFP endpoint, paste the method, URL, and request/response
+        shape from DevTools → Network. **Redact cookies, CSRF tokens, and user ids.**
+      render: http
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

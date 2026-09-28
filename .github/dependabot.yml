@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["dependencies"]
+
+  # Reads pyproject.toml; uv.lock is intentionally not committed.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["dependencies"]
+    # Bumped by hand, on purpose:
+    # - myfitnesspal is parsed by version-specific code.
+    # - curl-cffi minors swap the bundled curl-impersonate, changing the TLS
+    #   fingerprint MFP sees; nothing in CI exercises the network.
+    # - mcp majors need a real 2.x test run; myfitnesspal's typing-extensions
+    #   pin currently masks them from the resolver, so a green CI proves nothing.
+    ignore:
+      - dependency-name: myfitnesspal
+      - dependency-name: curl-cffi
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]

@@ -19,7 +19,7 @@ Connect your MyFitnessPal account
 def parse_cookie_input(text: str) -> dict[str, str]:
     text = text.strip()
     if text.lower().startswith("cookie:"):
-        text = text[len("cookie:"):].strip()
+        text = text[len("cookie:") :].strip()
     if "=" not in text:
         return {SESSION_COOKIE: text}
     cookies = {}
@@ -127,7 +127,9 @@ def run_auth_flow() -> int:
 
     save_cookies(cookies, username=client.effective_username)
     mfp_client.reset()
-    print(f"Connected as {client.effective_username}. Cookies saved to {config.cookies_path()}")
+    print(
+        f"Connected as {client.effective_username}. Cookies saved to {config.cookies_path()}"
+    )
 
     if refresh.available():
         print("Seeding the browser profile for automatic session refresh...")
@@ -135,8 +137,13 @@ def run_auth_flow() -> int:
             refresh.seed_profile(cookies)
             print(f"Auto-refresh ready (profile at {refresh.profile_dir()}).")
         except Exception as exc:
-            print(f"Could not seed the auto-refresh browser profile: {exc}", file=sys.stderr)
-            print("The server still works; sessions just need a manual re-auth when they expire.")
+            print(
+                f"Could not seed the auto-refresh browser profile: {exc}",
+                file=sys.stderr,
+            )
+            print(
+                "The server still works; sessions just need a manual re-auth when they expire."
+            )
     else:
         print(
             "Optional: install with the [autorefresh] extra and run auth again to "

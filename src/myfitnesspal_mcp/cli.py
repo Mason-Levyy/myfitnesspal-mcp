@@ -15,9 +15,17 @@ def main() -> None:
         default="serve",
         help="serve (default) or auth to connect your MyFitnessPal account",
     )
-    parser.add_argument("--http", action="store_true", help="serve over streamable HTTP instead of stdio")
-    parser.add_argument("--host", default="127.0.0.1", help="HTTP bind host (default 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8484, help="HTTP port (default 8484)")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="serve over streamable HTTP instead of stdio",
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="HTTP bind host (default 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8484, help="HTTP port (default 8484)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)

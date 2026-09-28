@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     fat REAL,
     water_ml REAL,
     weight REAL,
-    goal_calories REAL
+    goal_calories REAL,
+    diary_synced INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +90,27 @@ class Store:
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring databases created by older releases up to the current schema."""
+        columns = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(day_nutrition)")
+        }
+        if "diary_synced" not in columns:
+            self.conn.execute(
+                "ALTER TABLE day_nutrition "
+                "ADD COLUMN diary_synced INTEGER NOT NULL DEFAULT 0"
+            )
+            # Before this column existed, only a diary sync wrote these fields;
+            # weight-only rows came from weigh-ins and still need a fetch.
+            self.conn.execute(
+                "UPDATE day_nutrition SET diary_synced = 1 WHERE "
+                "calories IS NOT NULL OR protein IS NOT NULL OR carbs IS NOT NULL "
+                "OR fat IS NOT NULL OR water_ml IS NOT NULL "
+                "OR goal_calories IS NOT NULL"
+            )
+            self.conn.commit()
 
     def upsert_nutrition(self, day: str, **fields) -> None:
         unknown = set(fields) - set(NUTRITION_FIELDS)
@@ -104,9 +126,25 @@ class Store:
         )
         self.conn.commit()
 
+    def mark_diary_synced(self, day: str) -> None:
+        """Record that the day's MyFitnessPal diary has been fetched in full.
+
+        A row can exist with only a weigh-in (see `fitness_log_weight` and the
+        measurement backfill in sync.poll); gap-fill keys off this flag, not off
+        row existence, so such days still get their calories and macros.
+        """
+        self.conn.execute(
+            "INSERT INTO day_nutrition (day, diary_synced) VALUES (?, 1) "
+            "ON CONFLICT(day) DO UPDATE SET diary_synced = 1",
+            (day,),
+        )
+        self.conn.commit()
+
     def nutrition(self, day: str) -> dict | None:
         row = self.conn.execute(
-            "SELECT * FROM day_nutrition WHERE day = ?", (day,)
+            "SELECT day, calories, protein, carbs, fat, water_ml, weight, "
+            "goal_calories FROM day_nutrition WHERE day = ?",
+            (day,),
         ).fetchone()
         return _row_to_dict(row)
 
@@ -171,9 +209,11 @@ class Store:
             return None
         return row["body"]
 
-    def days_with_nutrition(self, start: str, end: str) -> set[str]:
+    def days_with_synced_diary(self, start: str, end: str) -> set[str]:
         rows = self.conn.execute(
-            "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ?", (start, end)
+            "SELECT day FROM day_nutrition "
+            "WHERE day >= ? AND day <= ? AND diary_synced = 1",
+            (start, end),
         ).fetchall()
         return {r["day"] for r in rows}
 

@@ -11,3 +11,6 @@ build/
 cookies*
 .pytest_cache/
 uv.lock
+.mypy_cache/
+.ruff_cache/
+.venv*/
