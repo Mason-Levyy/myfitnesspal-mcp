@@ -5,7 +5,8 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from . import diary, mfp_client, refresh, sync
+from . import diary, food_logging, mfp_client, refresh, sync
+from .food_ranking import MacroTargets
 from .store import Store, trend_column
 
 mcp = FastMCP("myfitnesspal")
@@ -106,32 +107,161 @@ async def fitness_search_food(
 
 
 @mcp.tool()
-async def fitness_log_food(
+async def fitness_draft_food(
     query: str,
-    meal: str = "breakfast",
     quantity: float = 1.0,
+    meal: str = "breakfast",
     date: str | None = None,
+    min_calories: float | None = None,
+    max_calories: float | None = None,
+    min_protein: float | None = None,
+    max_protein: float | None = None,
+    min_carbs: float | None = None,
+    max_carbs: float | None = None,
+    min_fat: float | None = None,
+    max_fat: float | None = None,
+    limit: int = 10,
+    ctx: Context = None,
+) -> dict:
+    """Draft a food entry: numbered options to choose from before logging.
+
+    Each option lists every serving size with its calories/protein/carbs/fat
+    for the whole entry (serving × quantity) and a suggested_serving. The
+    min_/max_ targets (grams; calories in kcal) also apply to the whole
+    entry: options that fit come first, near misses follow, flagged
+    fits_targets=false. A food you've confirmed before for this query is
+    pinned to the top. The order is fixed once drafted.
+
+    Log a choice with fitness_log_food(draft_id=..., option=N, serving=M);
+    call this again with different targets to refine. Drafts last 24 hours.
+    date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+    targets = MacroTargets(
+        min_calories=min_calories,
+        max_calories=max_calories,
+        min_protein=min_protein,
+        max_protein=max_protein,
+        min_carbs=min_carbs,
+        max_carbs=max_carbs,
+        min_fat=min_fat,
+        max_fat=max_fat,
+    )
+
+    def op(store, client):
+        return food_logging.draft_food(
+            client, store, query, day, meal, quantity, targets, limit
+        )
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
+async def fitness_log_food(
+    query: str | None = None,
+    meal: str | None = None,
+    quantity: float | None = None,
+    date: str | None = None,
+    draft_id: str | None = None,
+    option: int | None = None,
+    serving: int | None = None,
+    pin: bool = True,
     food_id: str | None = None,
     weight_id: str | None = None,
     ctx: Context = None,
 ) -> dict:
     """Log a food to the real MyFitnessPal diary.
 
-    Searches for `query` and logs the top match. To log an exact item, pass
-    the food_id + weight_id of a fitness_search_food candidate (query is then
-    used as the display name). meal: breakfast|lunch|dinner|snacks or any
-    meal name on the account. date: YYYY-MM-DD (default: today).
+    Preferred: pick from a fitness_draft_food draft with draft_id + option
+    (+ serving, default the option's suggested_serving). meal, quantity, and
+    date default to the draft's. pin=True remembers the choice so logging
+    the same query later reuses this food and serving.
+
+    With only `query`: logs a pinned food, or the single exact-name match;
+    otherwise nothing is logged and a draft is returned (needs_choice=true)
+    to pick from. With food_id + weight_id (from fitness_search_food): logs
+    exactly that item, `query` being its display name.
+
+    meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
+    on the account. quantity: number of servings (default 1).
+    date: YYYY-MM-DD (default today).
     """
-    day = parse_day(date)
+    explicit_day = parse_day(date) if date else None
 
     def op(store, client):
-        result = diary.push_food(
-            client, day, meal, query, quantity, food_id=food_id, weight_id=weight_id
-        )
-        sync.refresh_day(store, client, day)
-        return {"ok": True, **result, "day": store.day_record(day.isoformat())}
+        if draft_id is not None:
+            if option is None:
+                raise ValueError("option is required with draft_id")
+            result = food_logging.log_from_draft(
+                client,
+                store,
+                draft_id,
+                option,
+                serving=serving,
+                quantity=quantity,
+                meal=meal,
+                day=explicit_day,
+                pin=pin,
+            )
+        elif food_id is not None and weight_id is not None:
+            day = explicit_day or parse_day(None)
+            chosen_meal = meal or "breakfast"
+            chosen_quantity = 1.0 if quantity is None else quantity
+            logged = diary.push_food(
+                client,
+                day,
+                chosen_meal,
+                query or food_id,
+                chosen_quantity,
+                food_id=food_id,
+                weight_id=weight_id,
+            )
+            result = {
+                "logged": logged["matched"],
+                "food_id": food_id,
+                "weight_id": weight_id,
+                "quantity": chosen_quantity,
+                "meal": chosen_meal,
+                "date": day.isoformat(),
+                "source": "ids",
+            }
+        elif query:
+            result = food_logging.log_by_query(
+                client,
+                store,
+                query,
+                explicit_day or parse_day(None),
+                meal or "breakfast",
+                1.0 if quantity is None else quantity,
+            )
+        else:
+            raise ValueError("pass draft_id + option, food_id + weight_id, or query")
+        if not result.get("logged"):
+            return {"ok": True, **result}
+        logged_day = datetime.date.fromisoformat(result["date"])
+        sync.refresh_day(store, client, logged_day)
+        return {"ok": True, **result, "day": store.day_record(result["date"])}
 
     return await with_session(ctx, op)
+
+
+@mcp.tool()
+def fitness_list_food_pins() -> dict:
+    """List remembered food choices (query → food and serving) that
+    fitness_log_food reuses. Stored locally only."""
+    return {"pins": get_store().pins()}
+
+
+@mcp.tool()
+def fitness_clear_food_pin(query: str | None = None, clear_all: bool = False) -> dict:
+    """Forget a remembered food choice for `query`, or every choice with
+    clear_all=True, so the next log of that query drafts options again."""
+    store = get_store()
+    if clear_all:
+        return {"cleared": store.clear_pins()}
+    if not query:
+        raise ValueError("pass query, or clear_all=True")
+    return {"cleared": int(store.clear_pin(query))}
 
 
 @mcp.tool()
