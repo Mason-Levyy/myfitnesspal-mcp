@@ -138,35 +138,82 @@ def food_search(client, query: str):
     return results, None
 
 
-def _serving_label(serving_sizes: list) -> str | None:
-    if not serving_sizes:
+def serving_label(serving: dict) -> str | None:
+    """'1.5 cup' from a v2 serving size; None when it has neither value nor
+    unit."""
+    parts = []
+    value = serving.get("value")
+    if isinstance(value, (int, float)):
+        parts.append(f"{value:g}")
+    elif value is not None:
+        parts.append(str(value))
+    if serving.get("unit"):
+        parts.append(str(serving["unit"]))
+    return " ".join(parts) or None
+
+
+def _nutrition_multiplier(serving: dict) -> float | None:
+    try:
+        return float(serving["nutrition_multiplier"])
+    except (KeyError, TypeError, ValueError):
         return None
-    first = serving_sizes[0]
-    return f"{first.get('value')} {first.get('unit')}".strip()
 
 
 def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict]:
     """MFP's web client pairs serving_sizes[i] with data-weight-ids[i] by
     position (the two use different id spaces). A count mismatch means the
-    pairing can't be trusted, so no servings are offered."""
+    pairing can't be trusted, so no servings are offered. A malformed serving
+    (no multiplier or no label) is skipped after pairing, so the servings
+    around it keep their own weight_ids."""
     if len(weight_ids) != len(serving_sizes):
         return []
-    return [
-        {
-            "weight_id": weight_id,
-            "label": f"{serving['value']:g} {serving['unit']}".strip(),
-            "nutrition_multiplier": float(serving["nutrition_multiplier"]),
+    servings = []
+    for weight_id, serving in zip(weight_ids, serving_sizes, strict=True):
+        if not isinstance(serving, dict):
+            continue
+        multiplier = _nutrition_multiplier(serving)
+        label = serving_label(serving)
+        if multiplier is None or label is None:
+            continue
+        servings.append(
+            {"weight_id": weight_id, "label": label, "nutrition_multiplier": multiplier}
+        )
+    return servings
+
+
+def food_details(client, external_id: str | None) -> dict | None:
+    """v2 details for a search result as {verified, nutrition, serving_sizes},
+    nutrition being per nutrition_multiplier 1.0. None when the result has no
+    external id or the lookup fails; the search-page data still stands."""
+    if not external_id:
+        return None
+    try:
+        details = client._get_food_item_details(int(external_id))
+        nutrition = details["nutrition"]
+        return {
+            "verified": details.get("verified"),
+            "nutrition": {
+                "calories": details["calories"],
+                "protein": nutrition.get("protein"),
+                "carbs": nutrition.get("carbohydrates"),
+                "fat": nutrition.get("fat"),
+            },
+            "serving_sizes": details.get("serving_sizes") or [],
         }
-        for weight_id, serving in zip(weight_ids, serving_sizes, strict=True)
-    ]
+    except Exception:
+        return None
 
 
-def food_candidates(client, query: str, limit: int = 10) -> list[dict]:
+def food_candidates(
+    client, query: str, limit: int = 10, search_results: list[dict] | None = None
+) -> list[dict]:
     """Search results in food_ranking's candidate shape, with every serving
-    size and base nutrition (per nutrition_multiplier 1.0)."""
-    results, _ = food_search(client, query)
+    size and base nutrition (per nutrition_multiplier 1.0). Pass
+    `search_results` from food_search to skip searching again."""
+    if search_results is None:
+        search_results, _ = food_search(client, query)
     candidates = []
-    for search_rank, result in enumerate(results[:limit]):
+    for search_rank, result in enumerate(search_results[:limit]):
         candidate = {
             "food_id": result["food_id"],
             "name": result["name"],
@@ -177,23 +224,13 @@ def food_candidates(client, query: str, limit: int = 10) -> list[dict]:
             "servings": [],
             "default_weight_id": result["weight_id"],
         }
-        if result["external_id"]:
-            try:
-                details = client._get_food_item_details(int(result["external_id"]))
-            except Exception:
-                details = None
-            if details:
-                nutrition = details["nutrition"]
-                candidate["verified"] = details["verified"]
-                candidate["nutrition"] = {
-                    "calories": details["calories"],
-                    "protein": nutrition.get("protein"),
-                    "carbs": nutrition.get("carbohydrates"),
-                    "fat": nutrition.get("fat"),
-                }
-                candidate["servings"] = pair_servings(
-                    result["weight_ids"], details["serving_sizes"]
-                )
+        details = food_details(client, result["external_id"])
+        if details:
+            candidate["verified"] = details["verified"]
+            candidate["nutrition"] = details["nutrition"]
+            candidate["servings"] = pair_servings(
+                result["weight_ids"], details["serving_sizes"]
+            )
         candidates.append(candidate)
     return candidates
 
@@ -216,18 +253,12 @@ def search_food(
             "food_id": result["food_id"],
             "weight_id": result["weight_id"],
         }
-        if with_macros and result["external_id"]:
-            try:
-                details = client._get_food_item_details(int(result["external_id"]))
-                nutrition = details["nutrition"]
-                candidate["calories"] = details["calories"]
-                candidate["protein"] = nutrition.get("protein")
-                candidate["carbs"] = nutrition.get("carbohydrates")
-                candidate["fat"] = nutrition.get("fat")
-                candidate["serving"] = _serving_label(details["serving_sizes"])
-                candidate["verified"] = details["verified"]
-            except Exception:
-                pass
+        details = food_details(client, result["external_id"]) if with_macros else None
+        if details:
+            candidate.update(details["nutrition"])
+            candidate["verified"] = details["verified"]
+            if details["serving_sizes"]:
+                candidate["serving"] = serving_label(details["serving_sizes"][0])
         candidates.append(candidate)
     return candidates
 
