@@ -56,6 +56,48 @@ def test_search_food_survives_detail_failures(client):
     assert candidates[0]["protein"] is None
 
 
+def test_pair_servings_zips_weight_ids_by_position():
+    serving_sizes = [
+        {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
+        {"value": 1.0, "unit": "large", "nutrition_multiplier": 1.15},
+    ]
+    assert diary.pair_servings(["10", "20"], serving_sizes) == [
+        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0},
+        {"weight_id": "20", "label": "1 large", "nutrition_multiplier": 1.15},
+    ]
+
+
+def test_pair_servings_refuses_count_mismatch():
+    serving_sizes = [{"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0}]
+    assert diary.pair_servings(["10", "20"], serving_sizes) == []
+
+
+def test_food_candidates_build_ranking_shape(client):
+    client.food_details[999] = {
+        "calories": 105.0,
+        "verified": True,
+        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
+        "serving_sizes": [
+            {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
+            {"value": 118.0, "unit": "g", "nutrition_multiplier": 1.0},
+        ],
+    }
+    banana, banana_bread = diary.food_candidates(client, "banana")
+    assert banana["search_rank"] == 0
+    assert banana["verified"] is True
+    assert banana["nutrition"] == {
+        "calories": 105.0,
+        "protein": 1.3,
+        "carbs": 27.0,
+        "fat": 0.4,
+    }
+    assert [s["weight_id"] for s in banana["servings"]] == ["10", "20"]
+    assert banana["servings"][1]["label"] == "118 g"
+    assert banana_bread["servings"] == []
+    assert banana_bread["default_weight_id"] == "30"
+    assert banana_bread["nutrition"] == {"calories": 196.0}
+
+
 def test_push_food_logs_top_match(client):
     result = diary.push_food(client, TODAY, "snacks", "banana", quantity=2.0)
     assert result == {"matched": "Banana", "food_id": "111"}

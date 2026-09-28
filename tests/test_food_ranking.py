@@ -126,3 +126,24 @@ def test_candidate_without_servings_has_no_serving_index():
     option = rank_candidates([candidate], "mystery")[0]
     assert option["serving_index"] is None
     assert option["fits_targets"] is True
+
+
+def test_search_position_breaks_ties_before_name():
+    zucchini = _candidate("1", "Zucchini bread", 200, 3)
+    zucchini["search_rank"] = 0
+    apple = _candidate("2", "Apple bread", 200, 3)
+    apple["search_rank"] = 1
+    options = rank_candidates([apple, zucchini], "bread")
+    assert [o["food_id"] for o in options] == ["1", "2"]
+
+
+def test_pinned_food_uses_pinned_serving():
+    servings = [
+        {"weight_id": "small", "label": "1 small", "nutrition_multiplier": 0.5},
+        {"weight_id": "large", "label": "1 large", "nutrition_multiplier": 2.0},
+    ]
+    candidates = [_candidate("1", "Salmon", 200, 20, servings=servings)]
+    option = rank_candidates(
+        candidates, "salmon", pinned_food_id="1", pinned_weight_id="large"
+    )[0]
+    assert option["serving_index"] == 1

@@ -110,11 +110,14 @@ def rank_candidates(
     quantity: float = 1.0,
     targets: MacroTargets | None = None,
     pinned_food_id: str | None = None,
+    pinned_weight_id: str | None = None,
 ) -> list[dict]:
     """Numbered options, best first. Each option's `serving_index` points at
     the serving that best meets the targets (the first serving when there
-    are none). Order: pinned, fits targets, smallest shortfall, exact name
-    match, verified, then name and food_id so ties never depend on MFP."""
+    are none), or at the pinned serving for the pinned food. Order: pinned,
+    fits targets, smallest shortfall, exact name match, verified, MFP's
+    search position, then name and food_id. Save the result as a draft to
+    freeze it — MFP's own order can shift between searches."""
     targets = targets or MacroTargets()
     wanted_name = normalize_query(query)
     seen_food_ids = set()
@@ -125,7 +128,12 @@ def rank_candidates(
             continue
         seen_food_ids.add(food_id)
         servings = _evaluate_servings(candidate, quantity, targets)
+        pinned = food_id == pinned_food_id
         best_index = _best_serving_index(servings)
+        if pinned and pinned_weight_id is not None:
+            for index, serving in enumerate(servings):
+                if serving["weight_id"] == str(pinned_weight_id):
+                    best_index = index
         if best_index is None:
             shortfall = target_shortfall({}, targets)
         else:
@@ -136,10 +144,12 @@ def rank_candidates(
                 "name": candidate["name"],
                 "brand": candidate.get("brand"),
                 "verified": bool(candidate.get("verified")),
-                "pinned": food_id == pinned_food_id,
+                "pinned": pinned,
                 "exact_match": normalize_query(candidate["name"]) == wanted_name,
                 "fits_targets": shortfall == 0.0,
                 "shortfall": shortfall,
+                "search_rank": candidate.get("search_rank"),
+                "default_weight_id": candidate.get("default_weight_id"),
                 "serving_index": best_index,
                 "servings": servings,
             }
@@ -151,6 +161,8 @@ def rank_candidates(
             option["shortfall"],
             not option["exact_match"],
             not option["verified"],
+            option["search_rank"] is None,
+            option["search_rank"] or 0,
             option["name"].lower(),
             option["food_id"],
         )
