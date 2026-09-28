@@ -83,7 +83,7 @@ def exercise_html():
 @pytest.fixture
 def exercise_client(exercise_html):
     fake = FakeClient()
-    fake.session.route("GET", "exercise/diary", FakeResponse(text=exercise_html))
+    fake.session.route("GET", "exercise/diary/tester", FakeResponse(text=exercise_html))
     fake.session.route("POST", "exercise/remove", FakeResponse(status_code=200))
     return fake
 

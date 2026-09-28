@@ -287,10 +287,16 @@ def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) 
         return candidates[0]
     if candidates:
         raise AmbiguousEntry(query, meal, day, candidates)
+    raise no_matching_entry(entries, query, meal, day)
+
+
+def no_matching_entry(
+    entries: list[dict], query: str, meal: str | None, day: date
+) -> NoMatchingEntry:
     where = f" in {meal}" if meal else ""
     pool = _meal_pool(entries, meal)
     logged = "; ".join(f"{e['name']!r}" for e in pool) if pool else "(nothing logged)"
-    raise NoMatchingEntry(
+    return NoMatchingEntry(
         f"no diary entry matching '{query}'{where} on {day.isoformat()}. "
         f"Entries actually logged{where}: {logged}"
     )
@@ -396,37 +402,65 @@ def get_exercise(client, day: date) -> dict:
     return {"day": day.isoformat(), "exercise": sections}
 
 
-def exercise_entries(client, day: date) -> list[dict]:
-    """Cardio/strength exercise entries for a day, each with the delete id
-    MFP's web UI uses (/exercise/remove/{id})."""
+def exercise_page(client, day: date):
     url = parse.urljoin(
         client.BASE_URL_SECURE,
-        f"exercise/diary?date={day.isoformat()}",
+        f"exercise/diary/{client.effective_username}?date={day.isoformat()}",
     )
     resp = client.session.get(url, headers=api_headers(client))
     resp.raise_for_status()
     doc = lh.fromstring(resp.text)
+    tokens = doc.xpath("//meta[@name='csrf-token']/@content")
+    if not tokens:
+        raise RuntimeError("couldn't read the MyFitnessPal csrf token")
+    return doc, tokens[0]
+
+
+def _field_key(heading: str) -> str:
+    words = "".join(c if c.isalnum() else " " for c in heading.lower()).split()
+    return "_".join(words)
+
+
+def _cell_number(cell) -> float | None:
+    try:
+        return float(cell.text_content().strip().replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _exercise_name(cell) -> str:
+    for anchor in cell.xpath(".//a"):
+        name = anchor.text_content().strip()
+        if name:
+            return name
+    return cell.text_content().strip()
+
+
+def exercise_entries(doc) -> list[dict]:
+    """Deletable rows from every exercise section table. Each entry carries
+    the section ("cardiovascular", "strength training") plus that section's
+    own columns, e.g. minutes/calories_burned or sets/reps_set/weight_set."""
     entries = []
-    for tr in doc.xpath("//tr"):
-        name_anchor = tr.xpath(".//div[@class='exercise-description']/a")
-        links = tr.xpath(".//td[contains(@class,'delete')]/a/@href")
-        if not name_anchor or not links:
+    for table in doc.xpath("//table[contains(@class, 'table0')]"):
+        headings = table.xpath("./thead/tr[1]/td")
+        if not headings:
             continue
-        entry_id = links[0].rstrip("/").split("/")[-1].split("?")[0]
-        tds = tr.xpath("./td")
-        def _num(idx):
-            try:
-                return float(tds[idx].text_content().strip().replace(",", ""))
-            except (IndexError, ValueError):
-                return None
-        entries.append(
-            {
-                "entry_id": entry_id,
-                "name": name_anchor[0].text_content().strip(),
-                "minutes": _num(1),
-                "calories": _num(2),
+        section = headings[0].text_content().strip().lower()
+        field_keys = [_field_key(h.text_content()) for h in headings[1:]]
+        for tr in table.xpath("./tbody/tr[not(@class)]"):
+            delete_links = tr.xpath("./td[contains(@class, 'delete')]//a/@href")
+            if not delete_links:
+                continue
+            cells = tr.xpath("./td")
+            entry = {
+                "entry_id": delete_links[0].split("?")[0].rstrip("/").split("/")[-1],
+                "section": section,
+                "name": _exercise_name(cells[0]),
             }
-        )
+            for key, cell in zip(field_keys, cells[1:], strict=False):
+                if key:
+                    entry[key] = _cell_number(cell)
+            entries.append(entry)
     return entries
 
 
@@ -438,38 +472,27 @@ def remove_exercise_entry(client, entry_id: str, token: str) -> None:
             "Content-Type": "application/x-www-form-urlencoded",
             "Origin": "https://www.myfitnesspal.com",
             "Referer": parse.urljoin(
-                client.BASE_URL_SECURE, "exercise/diary"
+                client.BASE_URL_SECURE, f"exercise/diary/{client.effective_username}"
             ),
         },
     )
     if resp.status_code not in (200, 204):
-        raise RuntimeError(f"MyFitnessPal /exercise/remove returned HTTP {resp.status_code}")
+        raise RuntimeError(
+            f"MyFitnessPal /exercise/remove returned HTTP {resp.status_code}"
+        )
 
 
-def exercise_page(client, day: date):
-    url = parse.urljoin(
-        client.BASE_URL_SECURE,
-        f"exercise/diary?date={day.isoformat()}",
-    )
-    resp = client.session.get(url, headers=api_headers(client))
-    resp.raise_for_status()
-    doc = lh.fromstring(resp.text)
-    tokens = doc.xpath("//meta[@name='csrf-token']/@content")
-    if not tokens:
-        raise RuntimeError("couldn't read the MyFitnessPal csrf token")
-    return doc, tokens[0]
-
-
-def delete_exercise(client, day: date, query: str) -> dict:
-    """Delete every exercise entry whose name contains `query` (case-
-    insensitive). Returns what was removed — Garmin's sync splits one
-    workout into several rows with the same junk name, so delete-all-
-    matches is the common case for cleanup automation."""
+def delete_exercise(client, day: date, query: str, all_matches: bool = False) -> dict:
+    """Default: exactly one entry, resolved like delete_food. all_matches:
+    every entry whose name contains `query` (e.g. Garmin's duplicate rows)."""
     doc, token = exercise_page(client, day)
-    removed = []
-    for e in exercise_entries(client, day):
-        if query.lower() in e["name"].lower():
-            remove_exercise_entry(client, e["entry_id"], token)
-            removed.append({"removed": e["name"], "entry_id": e["entry_id"],
-                            "minutes": e["minutes"], "calories": e["calories"]})
-    return {"day": day.isoformat(), "removed": removed, "count": len(removed)}
+    entries = exercise_entries(doc)
+    if all_matches:
+        targets = find_entries(entries, query)
+        if not targets:
+            raise no_matching_entry(entries, query, None, day)
+    else:
+        targets = [resolve_entry(entries, query, None, day)]
+    for entry in targets:
+        remove_exercise_entry(client, entry["entry_id"], token)
+    return {"day": day.isoformat(), "removed": targets, "count": len(targets)}

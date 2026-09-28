@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_get_exercise_entries` lists a day's cardio and strength entries
+  with each section's own columns; `fitness_delete_exercise` removes one
+  entry by name match, or every match with `all_matches=True` (for syncs that
+  split one workout into several same-named rows).
 - Contributor documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `SECURITY.md`, issue and pull request templates, `CODEOWNERS`.
 - Ruff lint and format checks in CI, with a `pre-commit` config.

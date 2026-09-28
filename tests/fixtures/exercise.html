@@ -1,31 +1,84 @@
 <html>
 <head><meta name="csrf-token" content="EXERCISETOKEN"></head>
 <body>
-<table>
-  <tr>
-    <td class="first alt">
-      <div class="exercise-description"><a href="#">Aerobics, general</a></div>
-    </td>
-    <td>1</td>
-    <td>13</td>
-    <td class="delete"><a rel="nofollow" href="/exercise/remove/111">x</a></td>
-  </tr>
-  <tr>
-    <td class="first alt">
-      <div class="exercise-description"><a href="#">Running (jogging), 8 kph</a></div>
-    </td>
-    <td>20</td>
-    <td>201</td>
-    <td class="delete"><a rel="nofollow" href="/exercise/remove/222">x</a></td>
-  </tr>
-  <tr>
-    <td class="first alt">
-      <div class="exercise-description"><a href="#">Aerobics, general</a></div>
-    </td>
-    <td>4</td>
-    <td>25</td>
-    <td class="delete"><a rel="nofollow" href="/exercise/remove/333?date=2026-09-10">x</a></td>
-  </tr>
+<div id="diary-table">
+<table class="table0" id="cardio">
+  <colgroup><col class="col-1"><col class="col-2"><col class="col-2"><col class="col-3"></colgroup>
+  <thead>
+    <tr>
+      <td class="first">Cardiovascular</td>
+      <td>Minutes</td>
+      <td>Calories Burned</td>
+      <td class="last"></td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="first alt">
+        <div class="exercise-description"><a href="#" class="show_edit_exercise">Aerobics, general</a></div>
+      </td>
+      <td>1</td>
+      <td>13</td>
+      <td class="delete"><a rel="nofollow" href="/exercise/remove/111" class="delete-exercise">x</a></td>
+    </tr>
+    <tr>
+      <td class="first alt">
+        <div class="exercise-description"><a href="#" class="show_edit_exercise">Running (jogging), 8 kph</a></div>
+      </td>
+      <td>20</td>
+      <td>1,201</td>
+      <td class="delete"><a rel="nofollow" href="/exercise/remove/222" class="delete-exercise">x</a></td>
+    </tr>
+    <tr>
+      <td class="first alt">
+        <div class="exercise-description"><a href="#" class="show_edit_exercise">Aerobics, general</a></div>
+      </td>
+      <td>4</td>
+      <td>25</td>
+      <td class="delete"><a rel="nofollow" href="/exercise/remove/333?date=2026-09-10" class="delete-exercise">x</a></td>
+    </tr>
+    <tr class="bottom">
+      <td class="first">Daily Total / Goal</td>
+      <td>25 / 30</td>
+      <td>1,239 / 300</td>
+      <td></td>
+    </tr>
+  </tbody>
 </table>
+<table class="table0" id="strength">
+  <thead>
+    <tr>
+      <td class="first">Strength Training</td>
+      <td>Sets</td>
+      <td>Reps/Set</td>
+      <td>Weight/Set</td>
+      <td class="last"></td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="first alt"><a href="#" class="show_edit_exercise">Bench Press, Barbell</a></td>
+      <td>3</td>
+      <td>8</td>
+      <td>135</td>
+      <td class="delete"><a rel="nofollow" href="/exercise/remove/444" class="delete-exercise">x</a></td>
+    </tr>
+    <tr>
+      <td class="first alt"><a href="#" class="show_edit_exercise">Pull Up</a></td>
+      <td>4</td>
+      <td>10</td>
+      <td>N/A</td>
+      <td class="delete"><a rel="nofollow" href="/exercise/remove/555" class="delete-exercise">x</a></td>
+    </tr>
+    <tr class="bottom">
+      <td class="first">Daily Total</td>
+      <td>7</td>
+      <td>18</td>
+      <td>135</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+</div>
 </body>
 </html>
