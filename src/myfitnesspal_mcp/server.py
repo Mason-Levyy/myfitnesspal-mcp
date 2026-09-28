@@ -70,6 +70,27 @@ async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
     return await run_with_refresh(ctx, lambda: op(get_store(), mfp_client.get_client()))
 
 
+async def refresh_after_write(ctx: Context, day: datetime.date) -> dict:
+    """Re-syncs `day` after a diary write that already landed, as its own
+    retried call: a lapsed session then re-runs only this refresh, never the
+    write. A refresh that still fails is returned as `refresh_warning` rather
+    than raised, so the caller doesn't repeat a write that succeeded."""
+
+    def refresh_op(store, client):
+        sync.refresh_day(store, client, day)
+
+    try:
+        await with_session(ctx, refresh_op)
+    except Exception as exc:
+        return {
+            "refresh_warning": (
+                f"the diary change was saved, but refreshing the local copy of "
+                f"{day.isoformat()} failed ({exc}); don't repeat the change"
+            )
+        }
+    return {}
+
+
 @mcp.tool()
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
@@ -236,13 +257,20 @@ async def fitness_log_food(
             )
         else:
             raise ValueError("pass draft_id + option, food_id + weight_id, or query")
-        if not result.get("logged"):
-            return {"ok": True, **result}
-        logged_day = datetime.date.fromisoformat(result["date"])
-        sync.refresh_day(store, client, logged_day)
-        return {"ok": True, **result, "day": store.day_record(result["date"])}
+        return result
 
-    return await with_session(ctx, op)
+    result = await with_session(ctx, op)
+    if not result.get("logged"):
+        return {"ok": True, **result}
+    refresh_warning = await refresh_after_write(
+        ctx, datetime.date.fromisoformat(result["date"])
+    )
+    return {
+        "ok": True,
+        **result,
+        **refresh_warning,
+        "day": get_store().day_record(result["date"]),
+    }
 
 
 @mcp.tool()
@@ -281,11 +309,10 @@ async def fitness_delete_food(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.delete_food(client, day, query, meal)
-        sync.refresh_day(store, client, day)
-        return {"ok": True, **result}
+        return diary.delete_food(client, day, query, meal)
 
-    return await with_session(ctx, op)
+    result = await with_session(ctx, op)
+    return {"ok": True, **result, **await refresh_after_write(ctx, day)}
 
 
 @mcp.tool()
@@ -312,11 +339,10 @@ async def fitness_modify_food(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.modify_food(client, day, meal, query, new_query, quantity)
-        sync.refresh_day(store, client, day)
-        return {"ok": True, **result}
+        return diary.modify_food(client, day, meal, query, new_query, quantity)
 
-    return await with_session(ctx, op)
+    result = await with_session(ctx, op)
+    return {"ok": True, **result, **await refresh_after_write(ctx, day)}
 
 
 @mcp.tool()
