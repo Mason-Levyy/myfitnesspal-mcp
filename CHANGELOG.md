@@ -8,10 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_draft_food`: numbered food options with every serving size and
+  whole-entry macros, ranked deterministically and filtered by optional
+  min/max calorie, protein, carb, and fat targets; stored as a 24-hour draft.
+- `fitness_log_food` accepts `draft_id` + `option` (+ `serving`) and
+  remembers the choice per query; `fitness_list_food_pins` and
+  `fitness_clear_food_pin` manage remembered choices.
 - Contributor documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `SECURITY.md`, issue and pull request templates, `CODEOWNERS`.
 - Ruff lint and format checks in CI, with a `pre-commit` config.
 - Dependabot for GitHub Actions and Python dependencies.
+
+### Changed
+
+- `fitness_log_food(query=...)` no longer logs the top search result. It
+  logs a remembered food, or a single exact-name match; otherwise it logs
+  nothing and returns a draft to choose from.
 
 ### Fixed
 
