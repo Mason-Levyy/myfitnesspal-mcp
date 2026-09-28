@@ -128,7 +128,8 @@ renamed default meal or one of the up to two extra meals MyFitnessPal lets
 you add in Diary Settings. Matching is case-insensitive against your
 account's current meal labels. If you renamed a default meal, the keywords
 still work: `breakfast`/`lunch`/`dinner`/`snacks` fall back to your first
-through fourth meal. Any other unrecognized `meal` raises an error instead
+through fourth meal, unless that slot now carries a different default name
+(e.g. `lunch` won't land in a second meal you renamed to "Dinner"). Any other unrecognized `meal` raises an error instead
 of silently logging into the wrong section.
 
 Day summaries and trends read from a local SQLite cache that gap-fills from

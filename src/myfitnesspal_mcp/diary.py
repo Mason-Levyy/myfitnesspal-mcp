@@ -18,50 +18,66 @@ MEAL_ALIASES = {"snack": "snacks"}
 DEFAULT_MEAL_POSITIONS = {"breakfast": 0, "lunch": 1, "dinner": 2, "snacks": 3}
 
 
+def _collapse_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _normalize_meal(meal: str | None) -> str | None:
     if meal is None:
         return None
-    lowered = meal.lower()
+    lowered = _collapse_whitespace(meal).lower()
     return MEAL_ALIASES.get(lowered, lowered)
 
 
-class UnknownMeal(RuntimeError):
+class DiaryLookupError(RuntimeError):
+    """A lookup the user can fix by changing their input. Messages quote
+    user-controlled text (meal and food names), so these are never treated
+    as auth failures even when that text says 'session' or 'login'."""
+
+
+class UnknownMeal(DiaryLookupError):
     pass
 
 
-def _meal_label(tr) -> str | None:
-    cells = tr.xpath("./td")
-    if not cells:
-        return None
-    return cells[0].text_content().strip() or None
+class DiarySignedOut(RuntimeError):
+    """The diary page rendered without any meal sections — MFP served a
+    login or private-diary page, which means the session has lapsed."""
+
+
+def _is_meal_header(row) -> bool:
+    return "meal_header" in (row.get("class") or "")
+
+
+def _header_label(header_row, position: int) -> str:
+    """The meal's name from the header's first cell. An unnamed meal gets a
+    positional label so it still occupies its meal_id slot."""
+    cells = header_row.xpath("./td")
+    name = _collapse_whitespace(cells[0].text_content()) if cells else ""
+    return name or f"Meal {position + 1}"
 
 
 def meal_headers(doc) -> list[str]:
     """Meal labels in render order; the index is food/add's meal_id."""
-    headers = []
-    for tr in doc.xpath("//tr"):
-        classes = tr.get("class") or ""
-        if "meal_header" in classes:
-            label = _meal_label(tr)
-            if label:
-                headers.append(label)
-    return headers
+    header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
+    return [_header_label(row, position) for position, row in enumerate(header_rows)]
 
 
-def resolve_meal_id(doc, meal: str) -> str:
-    """Matches `meal` against the diary's current meal labels; the default
-    keywords still reach meals 1-4 on accounts that renamed them."""
-    target = _normalize_meal(meal)
+def resolve_meal(doc, meal: str) -> tuple[str, str]:
+    """(meal_id, label) for `meal`, matched against the diary's current meal
+    labels. The default keywords still reach meals 1-4 on accounts that
+    renamed them, unless that slot now carries a different default name."""
     headers = meal_headers(doc)
-    for index, header in enumerate(headers):
+    target = _normalize_meal(meal)
+    for position, header in enumerate(headers):
         if _normalize_meal(header) == target:
-            return str(index)
+            return str(position), header
     default_position = DEFAULT_MEAL_POSITIONS.get(target)
     if default_position is not None and default_position < len(headers):
-        return str(default_position)
-    available = ", ".join(headers) if headers else "(none found on diary page)"
+        header_at_default = headers[default_position]
+        if _normalize_meal(header_at_default) not in DEFAULT_MEAL_POSITIONS:
+            return str(default_position), header_at_default
     raise UnknownMeal(
-        f"no MyFitnessPal meal named {meal!r}. Configured meals: {available}"
+        f"no MyFitnessPal meal named {meal!r}. Configured meals: " + ", ".join(headers)
     )
 
 
@@ -207,25 +223,22 @@ def push_food(
     quantity: float = 1.0,
     food_id: str | None = None,
     weight_id: str | None = None,
+    page: tuple | None = None,
 ) -> dict:
-    doc, diary_csrf = diary_page(client, day)
-    meal_id = resolve_meal_id(doc, meal)
+    """`page` is an already-fetched (doc, csrf) from diary_page for `day`;
+    passing it skips a second diary GET."""
+    doc, csrf = page or diary_page(client, day)
+    meal_id, _ = resolve_meal(doc, meal)
     if food_id is not None and weight_id is not None:
-        csrf = diary_csrf
         matched = query
     else:
-        results, search_csrf = food_search(client, query)
+        results, _ = food_search(client, query)
         if not results:
             raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
-        csrf = search_csrf or diary_csrf
         top = results[0]
         food_id = top["food_id"]
         weight_id = top["weight_id"]
         matched = top["name"]
-    if not csrf:
-        raise RuntimeError(
-            "couldn't read the MyFitnessPal csrf token (try re-authenticating)"
-        )
     add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
     return {"matched": matched, "food_id": food_id}
 
@@ -241,6 +254,11 @@ def diary_page(client, day: date):
     tokens = doc.xpath("//meta[@name='csrf-token']/@content")
     if not tokens:
         raise RuntimeError("couldn't read the MyFitnessPal csrf token")
+    if not meal_headers(doc):
+        raise DiarySignedOut(
+            "the MyFitnessPal diary page has no meal sections; the login "
+            "session has likely expired"
+        )
     return doc, tokens[0]
 
 
@@ -248,12 +266,13 @@ def diary_entries(doc) -> list[dict]:
     """Food entries grouped under the preceding meal_header row."""
     entries = []
     current_meal = None
-    for tr in doc.xpath("//tr"):
-        classes = tr.get("class") or ""
-        if "meal_header" in classes:
-            current_meal = _normalize_meal(_meal_label(tr))
+    meal_position = -1
+    for row in doc.xpath("//tr"):
+        if _is_meal_header(row):
+            meal_position += 1
+            current_meal = _normalize_meal(_header_label(row, meal_position))
             continue
-        anchors = tr.xpath(".//a[@data-food-entry-id]")
+        anchors = row.xpath(".//a[@data-food-entry-id]")
         if anchors:
             entries.append(
                 {
@@ -295,11 +314,11 @@ def remove_entry(client, entry_id: str, token: str) -> None:
         )
 
 
-class NoMatchingEntry(RuntimeError):
+class NoMatchingEntry(DiaryLookupError):
     pass
 
 
-class AmbiguousEntry(RuntimeError):
+class AmbiguousEntry(DiaryLookupError):
     def __init__(self, query: str, meal: str | None, day: date, candidates: list[dict]):
         self.candidates = candidates
         where = f" in {meal}" if meal else ""
@@ -328,15 +347,13 @@ def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) 
     )
 
 
-def meal_label(doc, meal: str) -> str:
-    """The diary's own (normalized) label for `meal`, resolved the same way
-    as food/add's meal_id, so delete filters and adds always agree."""
-    return _normalize_meal(meal_headers(doc)[int(resolve_meal_id(doc, meal))])
-
-
-def delete_food(client, day: date, query: str, meal: str | None = None) -> dict:
-    doc, token = diary_page(client, day)
-    label = meal_label(doc, meal) if meal else None
+def delete_food(
+    client, day: date, query: str, meal: str | None = None, page: tuple | None = None
+) -> dict:
+    """`meal` is resolved exactly as food/add's meal_id is, so delete filters
+    and adds always agree. `page` is an already-fetched (doc, csrf)."""
+    doc, token = page or diary_page(client, day)
+    label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
     entry = resolve_entry(diary_entries(doc), query, label, day)
     remove_entry(client, entry["entry_id"], token)
     return {"removed": entry["name"], "meal": entry["meal"]}
@@ -351,9 +368,10 @@ def modify_food(
     quantity: float = 1.0,
 ) -> dict:
     """Delete + add are sequential; if the add fails the delete has already
-    applied."""
-    removed = delete_food(client, day, query, meal)
-    added = push_food(client, day, meal, new_query or query, quantity)
+    applied. Both reuse one diary page fetch."""
+    page = diary_page(client, day)
+    removed = delete_food(client, day, query, meal, page=page)
+    added = push_food(client, day, meal, new_query or query, quantity, page=page)
     return {"removed": removed["removed"], "added": added["matched"], "meal": meal}
 
 

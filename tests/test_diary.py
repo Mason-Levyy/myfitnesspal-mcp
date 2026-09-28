@@ -3,9 +3,13 @@ import datetime
 import pytest
 from lxml import html as lh
 
-from myfitnesspal_mcp import diary
+from myfitnesspal_mcp import diary, mfp_client
 
 TODAY = datetime.date(2026, 7, 8)
+
+
+def meal_id(doc, meal):
+    return diary.resolve_meal(doc, meal)[0]
 
 
 def test_food_search_parses_results_and_csrf(client):
@@ -64,7 +68,7 @@ def test_push_food_logs_top_match(client):
     assert data["food_entry[meal_id]"] == "3"
     assert data["food_entry[quantity]"] == "2.0"
     assert data["food_entry[date]"] == "2026-07-08"
-    assert kwargs["headers"]["X-CSRF-Token"] == "CSRF123"
+    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
     assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
 
@@ -142,10 +146,10 @@ def test_push_food_default_keyword_reaches_renamed_first_meal(
 
 def test_resolve_meal_id_falls_back_to_default_positions(custom_meals_diary_html):
     doc = lh.fromstring(custom_meals_diary_html)
-    assert diary.resolve_meal_id(doc, "breakfast") == "0"
-    assert diary.resolve_meal_id(doc, "Lunch") == "1"
-    assert diary.resolve_meal_id(doc, "dinner") == "2"
-    assert diary.resolve_meal_id(doc, "snack") == "3"
+    assert meal_id(doc, "breakfast") == "0"
+    assert meal_id(doc, "Lunch") == "1"
+    assert meal_id(doc, "dinner") == "2"
+    assert meal_id(doc, "snack") == "3"
 
 
 def test_resolve_meal_id_prefers_label_over_default_position():
@@ -153,7 +157,7 @@ def test_resolve_meal_id_prefers_label_over_default_position():
         "<table><tr class='meal_header'><td>Pre-workout</td></tr>"
         "<tr class='meal_header'><td>Breakfast</td></tr></table>"
     )
-    assert diary.resolve_meal_id(doc, "breakfast") == "1"
+    assert meal_id(doc, "breakfast") == "1"
 
 
 def test_resolve_meal_id_default_keyword_beyond_configured_meals():
@@ -161,7 +165,7 @@ def test_resolve_meal_id_default_keyword_beyond_configured_meals():
         "<table><tr class='meal_header'><td>Only meal</td></tr></table>"
     )
     with pytest.raises(diary.UnknownMeal, match="Only meal"):
-        diary.resolve_meal_id(doc, "dinner")
+        meal_id(doc, "dinner")
 
 
 def test_delete_food_default_keyword_filters_renamed_meal(
@@ -222,19 +226,93 @@ def test_push_food_falls_back_to_diary_csrf_when_search_has_none(client, make_re
     assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
 
 
+BLANK_SECOND_MEAL = (
+    "<table>"
+    "<tr class='meal_header'><td>Breakfast</td></tr>"
+    "<tr><td><a data-food-entry-id='b1'>Eggs</a></td></tr>"
+    "<tr class='meal_header'><td> </td></tr>"
+    "<tr><td><a data-food-entry-id='u1'>Mystery Bar</a></td></tr>"
+    "<tr class='meal_header'><td>Dinner</td></tr>"
+    "<tr class='meal_header'><td>Snacks</td></tr>"
+    "</table>"
+)
+
+
+def test_blank_meal_header_keeps_its_meal_id_slot():
+    doc = lh.fromstring(BLANK_SECOND_MEAL)
+    assert diary.meal_headers(doc) == ["Breakfast", "Meal 2", "Dinner", "Snacks"]
+    assert meal_id(doc, "snacks") == "3"
+    assert meal_id(doc, "dinner") == "2"
+
+
+def test_blank_meal_header_entries_agree_with_resolved_label():
+    doc = lh.fromstring(BLANK_SECOND_MEAL)
+    entries = diary.diary_entries(doc)
+    assert [(entry["meal"], entry["entry_id"]) for entry in entries] == [
+        ("breakfast", "b1"),
+        ("meal 2", "u1"),
+    ]
+    assert diary.resolve_meal(doc, "lunch") == ("1", "Meal 2")
+
+
+def test_default_keyword_does_not_fall_back_onto_another_default_meal():
+    doc = lh.fromstring(
+        "<table><tr class='meal_header'><td>Breakfast</td></tr>"
+        "<tr class='meal_header'><td>Dinner</td></tr>"
+        "<tr class='meal_header'><td>Supper</td></tr>"
+        "<tr class='meal_header'><td>Snacks</td></tr></table>"
+    )
+    with pytest.raises(diary.UnknownMeal, match="'lunch'"):
+        diary.resolve_meal(doc, "lunch")
+    assert meal_id(doc, "dinner") == "1"
+
+
+def test_meal_matching_collapses_whitespace_and_nbsp():
+    doc = lh.fromstring(
+        "<table><tr class='meal_header'><td>Morning\xa0Snack</td></tr></table>"
+    )
+    assert diary.resolve_meal(doc, "  morning   snack ") == ("0", "Morning Snack")
+
+
+def test_diary_page_without_meal_sections_is_an_auth_error(client, make_response):
+    client.session.route(
+        "GET",
+        "food/diary/tester",
+        make_response(
+            text="<html><head><meta name='csrf-token' content='T'></head>"
+            "<body><form id='login'></form></body></html>"
+        ),
+    )
+    with pytest.raises(diary.DiarySignedOut) as exc_info:
+        diary.push_food(client, TODAY, "breakfast", "banana")
+    assert mfp_client.is_auth_error(exc_info.value)
+    assert all("food/add" not in url for _, url, _ in client.session.calls)
+
+
+def test_lookup_errors_quoting_auth_words_are_not_auth_errors():
+    doc = lh.fromstring(
+        "<table><tr class='meal_header'><td>Training Session</td></tr></table>"
+    )
+    with pytest.raises(diary.UnknownMeal) as exc_info:
+        diary.resolve_meal(doc, "traning")
+    assert not mfp_client.is_auth_error(exc_info.value)
+    no_match = diary.NoMatchingEntry("no entry 'login cookie' in session")
+    assert not mfp_client.is_auth_error(no_match)
+
+
 def test_resolve_meal_id_matches_default_labels(diary_html):
     doc = lh.fromstring(diary_html)
-    assert diary.resolve_meal_id(doc, "breakfast") == "0"
-    assert diary.resolve_meal_id(doc, "SNACKS") == "3"
+    assert meal_id(doc, "breakfast") == "0"
+    assert meal_id(doc, "SNACKS") == "3"
 
 
 def test_resolve_meal_id_matches_renamed_and_extra_custom_meals(
     custom_meals_diary_html,
 ):
     doc = lh.fromstring(custom_meals_diary_html)
-    assert diary.resolve_meal_id(doc, "Meat") == "2"
-    assert diary.resolve_meal_id(doc, "snacks/misc") == "4"
-    assert diary.resolve_meal_id(doc, "Supplements/Sauces/Spreads") == "5"
+    assert meal_id(doc, "Meat") == "2"
+    assert meal_id(doc, "snacks/misc") == "4"
+    assert meal_id(doc, "Supplements/Sauces/Spreads") == "5"
 
 
 def test_resolve_meal_id_raises_with_available_meals_when_unmatched(
@@ -242,7 +320,7 @@ def test_resolve_meal_id_raises_with_available_meals_when_unmatched(
 ):
     doc = lh.fromstring(custom_meals_diary_html)
     with pytest.raises(diary.UnknownMeal) as exc_info:
-        diary.resolve_meal_id(doc, "brunch")
+        meal_id(doc, "brunch")
     message = str(exc_info.value)
     assert "brunch" in message
     assert "Fruits/Veggies/Nuts/Seeds" in message
@@ -337,6 +415,8 @@ def test_modify_food_deletes_then_adds(client):
         "added": "Banana",
         "meal": "breakfast",
     }
+    diary_fetches = [url for _, url, _ in client.session.calls if "food/diary" in url]
+    assert len(diary_fetches) == 1
 
 
 def test_get_note_double_unescapes_body(client, make_response):

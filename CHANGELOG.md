@@ -28,8 +28,12 @@ All notable changes to this project are documented here. The format follows
   `dinner`/`snacks` via a hardcoded 0-3 index and silently fell back to
   meal_id 0 for anything else — misfiling entries for accounts with renamed
   meals or the up to two extra custom meals MyFitnessPal allows. The four
-  keywords still reach the first four meals when those were renamed; any
-  other unresolvable `meal` now raises instead of defaulting to meal 0.
+  keywords still reach the first four meals when those were renamed (but
+  never a slot now named after a different default meal); any other
+  unresolvable `meal` now raises instead of defaulting to meal 0. Matching
+  ignores extra and non-breaking spaces, and an unnamed meal section keeps
+  its position. A diary page with no meal sections (a lapsed session) now
+  triggers the session refresh instead of an unknown-meal error.
 
 ## [0.3.0] - 2026-07-26
 
