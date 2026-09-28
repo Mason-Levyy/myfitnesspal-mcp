@@ -88,6 +88,7 @@ def _result_extras(anchor) -> dict:
     extras = {
         "external_id": anchor.get("data-external-id"),
         "brand": None,
+        "serving": None,
         "calories": None,
     }
     containers = anchor.xpath("ancestor::li[1]")
@@ -99,6 +100,8 @@ def _result_extras(anchor) -> dict:
     parts = info[0].text.strip().split(",")
     if len(parts) >= 3:
         extras["brand"] = " ".join(parts[0:-2]).strip()
+    if len(parts) >= 2:
+        extras["serving"] = parts[-2].strip() or None
     calories_text = parts[-1].replace("calories", "").strip()
     try:
         extras["calories"] = float(calories_text)
@@ -209,7 +212,11 @@ def food_candidates(
 ) -> list[dict]:
     """Search results in food_ranking's candidate shape, with every serving
     size and base nutrition (per nutrition_multiplier 1.0). Pass
-    `search_results` from food_search to skip searching again."""
+    `search_results` from food_search to skip searching again.
+
+    When servings can't be paired (details failed or counts differ), the
+    candidate gets the search listing's own serving and calories: the
+    default weight_id at multiplier 1.0, which is what the listing shows."""
     if search_results is None:
         search_results, _ = food_search(client, query)
     candidates = []
@@ -231,6 +238,15 @@ def food_candidates(
             candidate["servings"] = pair_servings(
                 result["weight_ids"], details["serving_sizes"]
             )
+        if not candidate["servings"]:
+            candidate["nutrition"] = {"calories": result["calories"]}
+            candidate["servings"] = [
+                {
+                    "weight_id": result["weight_id"],
+                    "label": result["serving"] or "default serving",
+                    "nutrition_multiplier": 1.0,
+                }
+            ]
         candidates.append(candidate)
     return candidates
 

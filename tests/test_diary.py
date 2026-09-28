@@ -98,7 +98,10 @@ def test_food_candidates_survive_one_malformed_food(client):
         "Banana",
         "Banana Bread",
     ]
-    assert candidates[0]["servings"] == []
+    assert candidates[0]["servings"] == [
+        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0}
+    ]
+    assert candidates[0]["nutrition"] == {"calories": 105.0}
 
 
 def test_food_candidates_build_ranking_shape(client):
@@ -122,7 +125,9 @@ def test_food_candidates_build_ranking_shape(client):
     }
     assert [s["weight_id"] for s in banana["servings"]] == ["10", "20"]
     assert banana["servings"][1]["label"] == "118 g"
-    assert banana_bread["servings"] == []
+    assert banana_bread["servings"] == [
+        {"weight_id": "30", "label": "1 slice", "nutrition_multiplier": 1.0}
+    ]
     assert banana_bread["default_weight_id"] == "30"
     assert banana_bread["nutrition"] == {"calories": 196.0}
 

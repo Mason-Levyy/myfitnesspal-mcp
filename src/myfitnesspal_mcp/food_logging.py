@@ -18,6 +18,14 @@ class DraftNotFound(RuntimeError):
     pass
 
 
+def _pinned_serving(pin: dict) -> dict:
+    return {
+        "weight_id": pin["weight_id"],
+        "label": pin["serving"] or "pinned serving",
+        "nutrition_multiplier": None,
+    }
+
+
 def _pinned_candidate(pin: dict) -> dict:
     return {
         "food_id": pin["food_id"],
@@ -26,15 +34,23 @@ def _pinned_candidate(pin: dict) -> dict:
         "verified": None,
         "search_rank": None,
         "nutrition": {},
-        "servings": [
-            {
-                "weight_id": pin["weight_id"],
-                "label": pin["serving"] or "pinned serving",
-                "nutrition_multiplier": 1.0,
-            }
-        ],
+        "servings": [_pinned_serving(pin)],
         "default_weight_id": pin["weight_id"],
     }
+
+
+def _include_pin(candidates: list[dict], pin: dict) -> None:
+    """Makes sure the pinned food and its exact serving are on offer, even
+    when search dropped the food or its details didn't list that serving —
+    otherwise confirming would silently re-pin a different serving."""
+    for candidate in candidates:
+        if str(candidate["food_id"]) != pin["food_id"]:
+            continue
+        serving_weight_ids = {serving["weight_id"] for serving in candidate["servings"]}
+        if pin["weight_id"] not in serving_weight_ids:
+            candidate["servings"].append(_pinned_serving(pin))
+        return
+    candidates.append(_pinned_candidate(pin))
 
 
 def _option_view(option: dict) -> dict:
@@ -83,8 +99,8 @@ def _build_draft(
     targets.validate()
     pin = store.pin(query)
     candidates = diary.food_candidates(client, query, limit)
-    if pin and all(str(c["food_id"]) != pin["food_id"] for c in candidates):
-        candidates.append(_pinned_candidate(pin))
+    if pin:
+        _include_pin(candidates, pin)
     if not candidates:
         raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
     options = rank_candidates(

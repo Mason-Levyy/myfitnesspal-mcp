@@ -90,6 +90,36 @@ def test_option_without_servings_uses_default_weight(banana_details, store):
     assert result["weight_id"] == "30"
 
 
+def test_unpaired_food_ranks_on_search_listing_calories(client, store):
+    draft = food_logging.draft_food(
+        client, store, "banana", TODAY, targets=MacroTargets(max_calories=200)
+    )
+    bread = next(o for o in draft["options"] if o["name"] == "Banana Bread")
+    assert bread["fits_targets"] is True
+    assert bread["servings"] == [
+        {
+            "serving": 0,
+            "label": "1 slice",
+            "calories": 196.0,
+            "protein": None,
+            "carbs": None,
+            "fat": None,
+            "fits_targets": True,
+        }
+    ]
+
+
+def test_pin_survives_details_failure_on_confirm(client, store):
+    store.set_pin("banana", "111", "20", "Banana", "1 large")
+    draft = food_logging.draft_food(client, store, "banana", TODAY)
+    banana = draft["options"][0]
+    assert banana["pinned"] is True
+    assert banana["servings"][banana["suggested_serving"]]["label"] == "1 large"
+    result = food_logging.log_from_draft(client, store, draft["draft_id"], option=1)
+    assert result["weight_id"] == "20"
+    assert store.pin("banana")["weight_id"] == "20"
+
+
 def test_bare_query_uses_pin_without_searching(client, store):
     store.set_pin("banana", "555", "77", "Banana, organic", "1 small")
     result = food_logging.log_by_query(client, store, "Banana", TODAY, "lunch", 1.0)

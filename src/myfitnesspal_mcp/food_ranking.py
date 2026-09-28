@@ -46,8 +46,12 @@ def normalize_query(query: str) -> str:
 
 
 def entry_nutrition(
-    base: dict, nutrition_multiplier: float, quantity: float
+    base: dict, nutrition_multiplier: float | None, quantity: float
 ) -> dict[str, float | None]:
+    """A serving with an unknown multiplier (a pinned serving the current
+    details don't list) has unknown nutrition."""
+    if nutrition_multiplier is None:
+        return dict.fromkeys(NUTRIENTS)
     factor = nutrition_multiplier * quantity
     scaled = {}
     for nutrient in NUTRIENTS:
