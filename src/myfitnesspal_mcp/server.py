@@ -119,11 +119,8 @@ async def fitness_log_food(
 
     Searches for `query` and logs the top match. To log an exact item, pass
     the food_id + weight_id of a fitness_search_food candidate (query is then
-    used as the display name). meal: breakfast|lunch|dinner|snacks, or the
-    literal name of any meal section on the account (including renamed or
-    extra custom meals) — matched case-insensitively against the diary's
-    current meal labels. Raises if `meal` doesn't match anything.
-    date: YYYY-MM-DD (default: today).
+    used as the display name). meal: breakfast|lunch|dinner|snacks or any
+    meal name on the account. date: YYYY-MM-DD (default: today).
     """
     day = parse_day(date)
 
@@ -148,9 +145,8 @@ async def fitness_delete_food(
     that to retry with a better query. If it matches more than one entry (and
     none is an exact name match), the error lists the candidates; narrow `query`
     to pick one.
-    meal: optional breakfast|lunch|dinner|snacks, or the literal name of any
-    meal section on the account (including renamed or extra custom meals), to
-    disambiguate duplicates. date: YYYY-MM-DD (default: today).
+    meal: optional breakfast|lunch|dinner|snacks or any meal name on the
+    account, to disambiguate duplicates. date: YYYY-MM-DD (default: today).
     """
     day = parse_day(date)
 
@@ -179,10 +175,9 @@ async def fitness_modify_food(
     none is an exact name match), the error lists the candidates; narrow `query`
     to pick one.
     new_query: the food to add instead; omit to re-add `query` (e.g. to change
-    quantity). meal: breakfast|lunch|dinner|snacks, or the literal name of any
-    meal section on the account (including renamed or extra custom meals) —
-    the same value is used to both find the existing entry and log the new
-    one. date: YYYY-MM-DD (default: today).
+    quantity). meal: breakfast|lunch|dinner|snacks or any meal name on the
+    account, used for both the delete and the add. date: YYYY-MM-DD
+    (default: today).
     """
     day = parse_day(date)
 

@@ -93,10 +93,6 @@ def test_push_food_no_results(client, make_response):
 def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
     client, custom_meals_diary_html, make_response
 ):
-    """MFP lets an account have up to 6 meal sections (4 default + 2 extra).
-    Meals 5 and 6 have no keyword — only their literal, possibly-custom name
-    reaches them. This must work identically to how fitness_delete_food /
-    fitness_modify_food already resolve custom meal names."""
     client.session.route(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
@@ -123,8 +119,6 @@ def test_push_food_resolves_sixth_custom_meal_case_insensitively(
 def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
     client, custom_meals_diary_html, make_response
 ):
-    """A typo or stale keyword must error loudly, not silently log into
-    meal_id 0 the way the old hardcoded MEAL_INDEX.get(meal, "0") did."""
     client.session.route(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )

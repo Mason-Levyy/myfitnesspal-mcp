@@ -30,9 +30,7 @@ def _normalize_meal(meal: str | None) -> str | None:
 
 
 class DiaryLookupError(RuntimeError):
-    """A lookup the user can fix by changing their input. Messages quote
-    user-controlled text (meal and food names), so these are never treated
-    as auth failures even when that text says 'session' or 'login'."""
+    pass
 
 
 class UnknownMeal(DiaryLookupError):
@@ -40,8 +38,7 @@ class UnknownMeal(DiaryLookupError):
 
 
 class DiarySignedOut(RuntimeError):
-    """The diary page rendered without any meal sections — MFP served a
-    login or private-diary page, which means the session has lapsed."""
+    pass
 
 
 def _is_meal_header(row) -> bool:
@@ -49,23 +46,17 @@ def _is_meal_header(row) -> bool:
 
 
 def _header_label(header_row, position: int) -> str:
-    """The meal's name from the header's first cell. An unnamed meal gets a
-    positional label so it still occupies its meal_id slot."""
     cells = header_row.xpath("./td")
     name = _collapse_whitespace(cells[0].text_content()) if cells else ""
     return name or f"Meal {position + 1}"
 
 
 def meal_headers(doc) -> list[str]:
-    """Meal labels in render order; the index is food/add's meal_id."""
     header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
     return [_header_label(row, position) for position, row in enumerate(header_rows)]
 
 
 def resolve_meal(doc, meal: str) -> tuple[str, str]:
-    """(meal_id, label) for `meal`, matched against the diary's current meal
-    labels. The default keywords still reach meals 1-4 on accounts that
-    renamed them, unless that slot now carries a different default name."""
     headers = meal_headers(doc)
     target = _normalize_meal(meal)
     for position, header in enumerate(headers):
@@ -225,8 +216,6 @@ def push_food(
     weight_id: str | None = None,
     page: tuple | None = None,
 ) -> dict:
-    """`page` is an already-fetched (doc, csrf) from diary_page for `day`;
-    passing it skips a second diary GET."""
     doc, csrf = page or diary_page(client, day)
     meal_id, _ = resolve_meal(doc, meal)
     if food_id is not None and weight_id is not None:
@@ -263,7 +252,6 @@ def diary_page(client, day: date):
 
 
 def diary_entries(doc) -> list[dict]:
-    """Food entries grouped under the preceding meal_header row."""
     entries = []
     current_meal = None
     meal_position = -1
@@ -350,8 +338,6 @@ def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) 
 def delete_food(
     client, day: date, query: str, meal: str | None = None, page: tuple | None = None
 ) -> dict:
-    """`meal` is resolved exactly as food/add's meal_id is, so delete filters
-    and adds always agree. `page` is an already-fetched (doc, csrf)."""
     doc, token = page or diary_page(client, day)
     label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
     entry = resolve_entry(diary_entries(doc), query, label, day)
@@ -367,8 +353,6 @@ def modify_food(
     new_query: str | None = None,
     quantity: float = 1.0,
 ) -> dict:
-    """Delete + add are sequential; if the add fails the delete has already
-    applied. Both reuse one diary page fetch."""
     page = diary_page(client, day)
     removed = delete_food(client, day, query, meal, page=page)
     added = push_food(client, day, meal, new_query or query, quantity, page=page)
