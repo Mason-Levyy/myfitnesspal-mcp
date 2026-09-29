@@ -25,9 +25,8 @@ All notable changes to this project are documented here. The format follows
   `SECURITY.md`, issue and pull request templates, `CODEOWNERS`.
 - Ruff lint and format checks in CI, with a `pre-commit` config.
 - Dependabot for GitHub Actions and Python dependencies.
-- README wordmark, new launch demo video (replacing the old GIF), and a
-  GitHub stars badge. The wordmark lives in `assets/`, which is left out of
-  the sdist.
+- README wordmark, a link to the launch video, and a GitHub stars badge.
+  The wordmark lives in `assets/`, which is left out of the sdist.
 
 ### Changed
 
