@@ -56,9 +56,84 @@ def test_search_food_survives_detail_failures(client):
     assert candidates[0]["protein"] is None
 
 
-def test_push_food_logs_top_match(client):
-    result = diary.push_food(client, TODAY, "snacks", "banana", quantity=2.0)
-    assert result == {"matched": "Banana", "food_id": "111"}
+def test_pair_servings_zips_weight_ids_by_position():
+    serving_sizes = [
+        {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
+        {"value": 1.0, "unit": "large", "nutrition_multiplier": 1.15},
+    ]
+    assert diary.pair_servings(["10", "20"], serving_sizes) == [
+        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0},
+        {"weight_id": "20", "label": "1 large", "nutrition_multiplier": 1.15},
+    ]
+
+
+def test_pair_servings_refuses_count_mismatch():
+    serving_sizes = [{"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0}]
+    assert diary.pair_servings(["10", "20"], serving_sizes) == []
+
+
+def test_pair_servings_skips_malformed_entries_without_shifting_weight_ids():
+    serving_sizes = [
+        {"value": None, "unit": None, "nutrition_multiplier": 1.0},
+        {"value": 1.0, "unit": "large"},
+        "not a serving",
+        {"value": 2, "unit": None, "nutrition_multiplier": "2.0"},
+        {"value": 40, "unit": "g", "nutrition_multiplier": 0.4},
+    ]
+    assert diary.pair_servings(["10", "20", "30", "40", "50"], serving_sizes) == [
+        {"weight_id": "40", "label": "2", "nutrition_multiplier": 2.0},
+        {"weight_id": "50", "label": "40 g", "nutrition_multiplier": 0.4},
+    ]
+
+
+def test_food_candidates_survive_one_malformed_food(client):
+    client.food_details[999] = {
+        "calories": 105.0,
+        "verified": True,
+        "nutrition": {},
+        "serving_sizes": [{"value": None}, {"unit": "slice"}],
+    }
+    candidates = diary.food_candidates(client, "banana")
+    assert [candidate["name"] for candidate in candidates] == [
+        "Banana",
+        "Banana Bread",
+    ]
+    assert candidates[0]["servings"] == [
+        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0}
+    ]
+    assert candidates[0]["nutrition"] == {"calories": 105.0}
+
+
+def test_food_candidates_build_ranking_shape(client):
+    client.food_details[999] = {
+        "calories": 105.0,
+        "verified": True,
+        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
+        "serving_sizes": [
+            {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
+            {"value": 118.0, "unit": "g", "nutrition_multiplier": 1.0},
+        ],
+    }
+    banana, banana_bread = diary.food_candidates(client, "banana")
+    assert banana["search_rank"] == 0
+    assert banana["verified"] is True
+    assert banana["nutrition"] == {
+        "calories": 105.0,
+        "protein": 1.3,
+        "carbs": 27.0,
+        "fat": 0.4,
+    }
+    assert [s["weight_id"] for s in banana["servings"]] == ["10", "20"]
+    assert banana["servings"][1]["label"] == "118 g"
+    assert banana_bread["servings"] == [
+        {"weight_id": "30", "label": "1 slice", "nutrition_multiplier": 1.0}
+    ]
+    assert banana_bread["default_weight_id"] == "30"
+    assert banana_bread["nutrition"] == {"calories": 196.0}
+
+
+def test_push_food_posts_the_given_food(client):
+    diary.push_food(client, TODAY, "snacks", "111", "10", quantity=2.0)
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -72,22 +147,12 @@ def test_push_food_logs_top_match(client):
     assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
 
-def test_push_food_exact_candidate_uses_diary_csrf(client):
-    result = diary.push_food(
-        client, TODAY, "lunch", "Banana", food_id="777", weight_id="88"
-    )
-    assert result["food_id"] == "777"
+def test_push_food_never_searches(client):
+    diary.push_food(client, TODAY, "lunch", "777", "88")
     method, url, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[food_id]"] == "777"
-    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
-
-
-def test_push_food_no_results(client, make_response):
-    client.session.route(
-        "GET", "food/search", make_response(text="<html><body></body></html>")
-    )
-    with pytest.raises(RuntimeError, match="no MyFitnessPal food found"):
-        diary.push_food(client, TODAY, "breakfast", "unobtainium")
+    assert kwargs["data"]["food_entry[meal_id]"] == "1"
+    assert not any("food/search" in url for _, url, _ in client.session.calls)
 
 
 def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
@@ -96,8 +161,7 @@ def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
     client.session.route(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
-    result = diary.push_food(client, TODAY, "Snacks/Misc", "banana")
-    assert result == {"matched": "Banana", "food_id": "111"}
+    diary.push_food(client, TODAY, "Snacks/Misc", "111", "10")
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -110,8 +174,7 @@ def test_push_food_resolves_sixth_custom_meal_case_insensitively(
     client.session.route(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
-    result = diary.push_food(client, TODAY, "supplements/sauces/spreads", "banana")
-    assert result == {"matched": "Banana", "food_id": "111"}
+    diary.push_food(client, TODAY, "supplements/sauces/spreads", "111", "10")
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "5"
 
@@ -123,7 +186,7 @@ def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
-        diary.push_food(client, TODAY, "brunch", "banana")
+        diary.push_food(client, TODAY, "brunch", "111", "10")
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
 
@@ -133,7 +196,7 @@ def test_push_food_default_keyword_reaches_renamed_first_meal(
     client.session.route(
         "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "breakfast", "banana")
+    diary.push_food(client, TODAY, "breakfast", "111", "10")
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "0"
 
@@ -205,21 +268,6 @@ def test_meal_headers_ignore_nutrient_column_headings(diary_html):
     assert diary.meal_headers(doc) == ["Breakfast", "Lunch", "Dinner", "Snacks"]
 
 
-def test_push_food_falls_back_to_diary_csrf_when_search_has_none(client, make_response):
-    client.session.route(
-        "GET",
-        "food/search",
-        make_response(
-            text=client.session.routes[("GET", "food/search")].text.replace(
-                'name="csrf-token"', 'name="unrelated"'
-            )
-        ),
-    )
-    diary.push_food(client, TODAY, "breakfast", "banana")
-    _, _, kwargs = client.session.calls[-1]
-    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
-
-
 BLANK_SECOND_MEAL = (
     "<table>"
     "<tr class='meal_header'><td>Breakfast</td></tr>"
@@ -278,7 +326,7 @@ def test_diary_page_without_meal_sections_is_an_auth_error(client, make_response
         ),
     )
     with pytest.raises(diary.DiarySignedOut) as exc_info:
-        diary.push_food(client, TODAY, "breakfast", "banana")
+        diary.push_food(client, TODAY, "breakfast", "111", "10")
     assert mfp_client.is_auth_error(exc_info.value)
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
@@ -400,17 +448,6 @@ def test_delete_food_removes_match(client):
 def test_delete_food_no_match(client):
     with pytest.raises(diary.NoMatchingEntry, match="in dinner"):
         diary.delete_food(client, TODAY, "coffee", meal="dinner")
-
-
-def test_modify_food_deletes_then_adds(client):
-    result = diary.modify_food(client, TODAY, "breakfast", "coffee", "banana")
-    assert result == {
-        "removed": "Coffee, 1 cup",
-        "added": "Banana",
-        "meal": "breakfast",
-    }
-    diary_fetches = [url for _, url, _ in client.session.calls if "food/diary" in url]
-    assert len(diary_fetches) == 1
 
 
 def test_get_note_double_unescapes_body(client, make_response):

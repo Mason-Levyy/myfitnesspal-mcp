@@ -8,12 +8,42 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_draft_food`: numbered food options with every serving size and
+  whole-entry macros, ranked deterministically and filtered by optional
+  min/max calorie, protein, carb, and fat targets; stored as a 24-hour draft.
+- `fitness_log_food` accepts `draft_id` + `option` (+ `serving`) and
+  remembers the choice per query; `fitness_list_food_pins` and
+  `fitness_clear_food_pin` manage remembered choices.
 - Contributor documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `SECURITY.md`, issue and pull request templates, `CODEOWNERS`.
 - Ruff lint and format checks in CI, with a `pre-commit` config.
 - Dependabot for GitHub Actions and Python dependencies.
 
+### Changed
+
+- `fitness_log_food(query=...)` no longer logs the top search result. It
+  logs a remembered food, or a single exact-name match; otherwise it logs
+  nothing and returns a draft to choose from. A single exact match is read
+  off the search page, with no per-result detail requests.
+- `fitness_modify_food` chooses its replacement the same way (remembered
+  food, single exact match, or a draft) before deleting anything; an
+  ambiguous replacement changes nothing and is confirmed with `draft_id` +
+  `option`. Its result reports `logged` (plus `food_id`, `weight_id`,
+  `serving`) in place of `added`.
+- `fitness_log_food` with `food_id` + `weight_id` now also returns `serving`.
+
 ### Fixed
+
+- A session that lapsed while re-syncing the day after `fitness_log_food`,
+  `fitness_delete_food` or `fitness_modify_food` retried the whole call, so
+  the food was logged (or removed) twice. Only the re-sync is retried now; if
+  it still fails, the result carries `refresh_warning` instead of an error.
+- Drafts no longer fail outright when one search result has a malformed
+  serving size; that serving is skipped.
+- Confirming a pinned food whose serving list failed to load no longer
+  replaces the pin with the default serving.
+- Foods whose serving sizes can't be loaded are ranked on their search
+  listing's calories instead of as a full miss against macro targets.
 
 - Gap-fill now keys off an explicit `diary_synced` flag instead of row
   existence. Previously a weight-only row (from `fitness_log_weight` on a past

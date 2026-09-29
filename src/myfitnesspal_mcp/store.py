@@ -1,8 +1,11 @@
+import json
+import secrets
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config
+from .food_ranking import normalize_query
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS day_nutrition (
@@ -40,7 +43,22 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS food_pin (
+    query TEXT PRIMARY KEY,
+    food_id TEXT NOT NULL,
+    weight_id TEXT NOT NULL,
+    name TEXT,
+    serving TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS food_draft (
+    draft_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    body TEXT NOT NULL
+);
 """
+
+DRAFT_LIFETIME = timedelta(hours=24)
 
 NUTRITION_FIELDS = (
     "calories",
@@ -255,3 +273,88 @@ class Store:
             ((day or date.today()).isoformat(),),
         )
         self.conn.commit()
+
+    def set_pin(
+        self,
+        query: str,
+        food_id: str,
+        weight_id: str,
+        name: str | None,
+        serving: str | None,
+    ) -> dict:
+        pin = {
+            "query": normalize_query(query),
+            "food_id": str(food_id),
+            "weight_id": str(weight_id),
+            "name": name,
+            "serving": serving,
+            "updated_at": _utc_now().isoformat(),
+        }
+        self.conn.execute(
+            "INSERT INTO food_pin (query, food_id, weight_id, name, serving, "
+            "updated_at) VALUES (:query, :food_id, :weight_id, :name, :serving, "
+            ":updated_at) ON CONFLICT(query) DO UPDATE SET "
+            "food_id = excluded.food_id, weight_id = excluded.weight_id, "
+            "name = excluded.name, serving = excluded.serving, "
+            "updated_at = excluded.updated_at",
+            pin,
+        )
+        self.conn.commit()
+        return pin
+
+    def pin(self, query: str) -> dict | None:
+        row = self.conn.execute(
+            "SELECT query, food_id, weight_id, name, serving, updated_at "
+            "FROM food_pin WHERE query = ?",
+            (normalize_query(query),),
+        ).fetchone()
+        return _row_to_dict(row)
+
+    def pins(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT query, food_id, weight_id, name, serving, updated_at "
+            "FROM food_pin ORDER BY query"
+        ).fetchall()
+        return [dict(pin_row) for pin_row in rows]
+
+    def clear_pin(self, query: str) -> bool:
+        cursor = self.conn.execute(
+            "DELETE FROM food_pin WHERE query = ?", (normalize_query(query),)
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def clear_pins(self) -> int:
+        cursor = self.conn.execute("DELETE FROM food_pin")
+        self.conn.commit()
+        return cursor.rowcount
+
+    def save_draft(self, body: dict, now: datetime | None = None) -> str:
+        created_at = now or _utc_now()
+        self.conn.execute(
+            "DELETE FROM food_draft WHERE created_at < ?",
+            ((created_at - DRAFT_LIFETIME).isoformat(),),
+        )
+        draft_id = secrets.token_hex(4)
+        self.conn.execute(
+            "INSERT INTO food_draft (draft_id, created_at, body) VALUES (?, ?, ?)",
+            (draft_id, created_at.isoformat(), json.dumps(body)),
+        )
+        self.conn.commit()
+        return draft_id
+
+    def draft(self, draft_id: str, now: datetime | None = None) -> dict | None:
+        row = self.conn.execute(
+            "SELECT created_at, body FROM food_draft WHERE draft_id = ?",
+            (draft_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        created_at = datetime.fromisoformat(row["created_at"])
+        if (now or _utc_now()) - created_at > DRAFT_LIFETIME:
+            return None
+        return json.loads(row["body"])
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)

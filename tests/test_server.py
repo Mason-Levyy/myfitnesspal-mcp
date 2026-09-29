@@ -115,6 +115,135 @@ def test_bulk_export_validates_range(local_store):
         asyncio.run(server.fitness_bulk_export(start="2026-07-08", end="2026-07-01"))
 
 
+@pytest.fixture
+def connected(local_store, client, monkeypatch):
+    monkeypatch.setattr(server.mfp_client, "get_client", lambda: client)
+    monkeypatch.setattr(server.sync, "refresh_day", lambda store, client, day: None)
+    return client
+
+
+def test_draft_then_log_by_option(connected, local_store):
+    draft = asyncio.run(
+        server.fitness_draft_food(query="banana", meal="lunch", date="2026-07-08")
+    )
+    result = asyncio.run(server.fitness_log_food(draft_id=draft["draft_id"], option=1))
+    assert result["ok"] is True
+    assert result["logged"] == "Banana"
+    assert result["meal"] == "lunch"
+    assert result["date"] == "2026-07-08"
+    assert local_store.pin("banana")["food_id"] == "111"
+
+
+def test_log_food_requires_option_with_draft(connected):
+    with pytest.raises(ValueError, match="option is required"):
+        asyncio.run(server.fitness_log_food(draft_id="abc"))
+
+
+def test_log_food_ambiguous_query_returns_choices(connected):
+    result = asyncio.run(server.fitness_log_food(query="bread"))
+    assert result["ok"] is True
+    assert result["needs_choice"] is True
+    assert not any(call[0] == "POST" for call in connected.session.calls)
+
+
+def test_log_food_with_explicit_ids(connected):
+    result = asyncio.run(
+        server.fitness_log_food(
+            query="Banana", food_id="111", weight_id="20", date="2026-07-08"
+        )
+    )
+    assert result["source"] == "ids"
+    _, _, kwargs = connected.session.calls[-1]
+    assert kwargs["data"]["food_entry[weight_id]"] == "20"
+
+
+def posts_to(client, fragment):
+    return [
+        url
+        for method, url, _ in client.session.calls
+        if method == "POST" and fragment in url
+    ]
+
+
+@pytest.fixture
+def refresh_expires_once(connected, monkeypatch):
+    monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
+    refresh_calls = []
+
+    def flaky_refresh(store, client, day):
+        refresh_calls.append(day)
+        if len(refresh_calls) == 1:
+            raise MyfitnesspalLoginError("session expired")
+
+    monkeypatch.setattr(server.sync, "refresh_day", flaky_refresh)
+    return refresh_calls
+
+
+def test_log_food_retry_after_lapsed_refresh_logs_once(connected, refresh_expires_once):
+    result = asyncio.run(
+        server.fitness_log_food(
+            query="Banana",
+            food_id="111",
+            weight_id="20",
+            date="2026-07-08",
+            ctx=FakeContext(),
+        )
+    )
+    assert result["ok"] is True
+    assert "refresh_warning" not in result
+    assert len(posts_to(connected, "food/add")) == 1
+    assert len(refresh_expires_once) == 2
+
+
+def test_delete_food_retry_after_lapsed_refresh_removes_once(
+    connected, refresh_expires_once
+):
+    asyncio.run(
+        server.fitness_delete_food(query="coffee", date="2026-07-08", ctx=FakeContext())
+    )
+    assert len(posts_to(connected, "food/remove")) == 1
+
+
+def test_modify_food_retry_after_lapsed_refresh_writes_once(
+    connected, refresh_expires_once
+):
+    asyncio.run(
+        server.fitness_modify_food(
+            query="coffee", new_query="banana", date="2026-07-08", ctx=FakeContext()
+        )
+    )
+    assert len(posts_to(connected, "food/remove")) == 1
+    assert len(posts_to(connected, "food/add")) == 1
+
+
+def test_failed_refresh_after_write_warns_instead_of_raising(connected, monkeypatch):
+    monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
+
+    def always_expired(store, client, day):
+        raise MyfitnesspalLoginError("session expired")
+
+    monkeypatch.setattr(server.sync, "refresh_day", always_expired)
+    result = asyncio.run(
+        server.fitness_delete_food(query="coffee", date="2026-07-08", ctx=FakeContext())
+    )
+    assert result["ok"] is True
+    assert "don't repeat" in result["refresh_warning"]
+    assert len(posts_to(connected, "food/remove")) == 1
+
+
+def test_pin_tools(local_store):
+    local_store.set_pin("banana", "111", "10", "Banana", "1 medium")
+    local_store.set_pin("oats", "333", "40", "Oats", None)
+    assert [p["query"] for p in server.fitness_list_food_pins()["pins"]] == [
+        "banana",
+        "oats",
+    ]
+    assert server.fitness_clear_food_pin(query="Banana") == {"cleared": 1}
+    assert server.fitness_clear_food_pin(clear_all=True) == {"cleared": 1}
+    with pytest.raises(ValueError, match="pass query"):
+        server.fitness_clear_food_pin()
+
+
 def test_bulk_export_reads_cache_without_client(local_store):
     local_store.upsert_nutrition("2026-07-05", calories=1500.0)
     result = asyncio.run(
