@@ -373,6 +373,34 @@ async def fitness_log_weight(
 
 
 @mcp.tool()
+async def fitness_log_water(
+    amount: float,
+    unit: str = "cup",
+    replace: bool = False,
+    date: str | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Log water to the real MyFitnessPal water tracker.
+
+    amount: quantity to add to the day's total. unit: cup | fl_oz | ml | l
+    (common spellings like "cups", "oz", "fl oz", "milliliters", "litres" are
+    accepted). replace: set the day's total to `amount` instead of adding —
+    use it to correct a mislogged total (amount=0 clears the day).
+    Returns previous_ml; to undo a mistake, call again with
+    amount=previous_ml, unit="ml", replace=True.
+    date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        result = diary.log_water(client, day, amount, unit, replace=replace)
+        store.upsert_nutrition(day.isoformat(), water_ml=result["water_ml"])
+        return {"ok": True, **result}
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
 async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal exercise diary (cardio + strength) for a day.
 
