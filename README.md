@@ -83,8 +83,7 @@ streamable HTTP works, not just Claude.
 
 ## Authentication
 
-MyFitnessPal uses your browser's
-session cookie:
+This server signs in with your browser's MyFitnessPal session cookie:
 
 1. Log in at [myfitnesspal.com](https://www.myfitnesspal.com)
 2. Open DevTools (F12) → **Application** (Chrome) or **Storage** (Firefox) →
