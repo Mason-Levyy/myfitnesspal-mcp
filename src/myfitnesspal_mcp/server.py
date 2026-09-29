@@ -71,11 +71,6 @@ async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
 
 
 async def refresh_after_write(ctx: Context, day: datetime.date) -> dict:
-    """Re-syncs `day` after a diary write that already landed, as its own
-    retried call: a lapsed session then re-runs only this refresh, never the
-    write. A refresh that still fails is returned as `refresh_warning` rather
-    than raised, so the caller doesn't repeat a write that succeeded."""
-
     def refresh_op(store, client):
         sync.refresh_day(store, client, day)
 

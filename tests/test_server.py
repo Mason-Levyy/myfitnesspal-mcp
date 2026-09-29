@@ -167,7 +167,6 @@ def posts_to(client, fragment):
 
 @pytest.fixture
 def refresh_expires_once(connected, monkeypatch):
-    """refresh_day hits a lapsed session on its first call only."""
     monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
     refresh_calls = []
 

@@ -142,8 +142,6 @@ def food_search(client, query: str):
 
 
 def serving_label(serving: dict) -> str | None:
-    """'1.5 cup' from a v2 serving size; None when it has neither value nor
-    unit."""
     parts = []
     value = serving.get("value")
     if isinstance(value, (int, float)):
@@ -163,11 +161,6 @@ def _nutrition_multiplier(serving: dict) -> float | None:
 
 
 def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict]:
-    """MFP's web client pairs serving_sizes[i] with data-weight-ids[i] by
-    position (the two use different id spaces). A count mismatch means the
-    pairing can't be trusted, so no servings are offered. A malformed serving
-    (no multiplier or no label) is skipped after pairing, so the servings
-    around it keep their own weight_ids."""
     if len(weight_ids) != len(serving_sizes):
         return []
     servings = []
@@ -185,9 +178,6 @@ def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict
 
 
 def food_details(client, external_id: str | None) -> dict | None:
-    """v2 details for a search result as {verified, nutrition, serving_sizes},
-    nutrition being per nutrition_multiplier 1.0. None when the result has no
-    external id or the lookup fails; the search-page data still stands."""
     if not external_id:
         return None
     try:
@@ -210,13 +200,6 @@ def food_details(client, external_id: str | None) -> dict | None:
 def food_candidates(
     client, query: str, limit: int = 10, search_results: list[dict] | None = None
 ) -> list[dict]:
-    """Search results in food_ranking's candidate shape, with every serving
-    size and base nutrition (per nutrition_multiplier 1.0). Pass
-    `search_results` from food_search to skip searching again.
-
-    When servings can't be paired (details failed or counts differ), the
-    candidate gets the search listing's own serving and calories: the
-    default weight_id at multiplier 1.0, which is what the listing shows."""
     if search_results is None:
         search_results, _ = food_search(client, query)
     candidates = []

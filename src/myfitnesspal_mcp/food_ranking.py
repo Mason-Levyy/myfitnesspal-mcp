@@ -1,15 +1,3 @@
-"""Deterministic ordering and macro-target filtering for food candidates.
-
-MyFitnessPal's search order shifts between calls, so ranking here is a pure
-function of the candidate data: the same inputs always produce the same
-options in the same order.
-
-A candidate is a dict with food_id, name, brand, verified, `nutrition` (per
-nutrition_multiplier 1.0) and `servings` — each {weight_id, label,
-nutrition_multiplier}. Targets apply to the whole entry: base nutrition ×
-serving multiplier × quantity.
-"""
-
 from dataclasses import dataclass
 
 NUTRIENTS = ("calories", "protein", "carbs", "fat")
@@ -48,8 +36,6 @@ def normalize_query(query: str) -> str:
 def entry_nutrition(
     base: dict, nutrition_multiplier: float | None, quantity: float
 ) -> dict[str, float | None]:
-    """A serving with an unknown multiplier (a pinned serving the current
-    details don't list) has unknown nutrition."""
     if nutrition_multiplier is None:
         return dict.fromkeys(NUTRIENTS)
     factor = nutrition_multiplier * quantity
@@ -61,9 +47,6 @@ def entry_nutrition(
 
 
 def target_shortfall(nutrition: dict, targets: MacroTargets) -> float:
-    """0.0 when every bounded nutrient is inside its range; otherwise the
-    summed relative distance outside the ranges. A bounded nutrient MFP
-    doesn't report counts as a full miss."""
     shortfall = 0.0
     for nutrient, (lower, upper) in targets.bounds().items():
         value = nutrition.get(nutrient)
@@ -116,12 +99,6 @@ def rank_candidates(
     pinned_food_id: str | None = None,
     pinned_weight_id: str | None = None,
 ) -> list[dict]:
-    """Numbered options, best first. Each option's `serving_index` points at
-    the serving that best meets the targets (the first serving when there
-    are none), or at the pinned serving for the pinned food. Order: pinned,
-    fits targets, smallest shortfall, exact name match, verified, MFP's
-    search position, then name and food_id. Save the result as a draft to
-    freeze it — MFP's own order can shift between searches."""
     targets = targets or MacroTargets()
     wanted_name = normalize_query(query)
     seen_food_ids = set()

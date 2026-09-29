@@ -1,12 +1,3 @@
-"""Draft-then-confirm food logging.
-
-A draft freezes ranked search options (with every serving size) in the local
-store; logging picks an option and serving from it by number, so what gets
-logged never depends on MyFitnessPal's search order at confirm time.
-Confirmed picks are pinned: the same words then log the same food and
-serving without searching.
-"""
-
 from dataclasses import asdict
 from datetime import date
 
@@ -40,9 +31,6 @@ def _pinned_candidate(pin: dict) -> dict:
 
 
 def _include_pin(candidates: list[dict], pin: dict) -> None:
-    """Makes sure the pinned food and its exact serving are on offer, even
-    when search dropped the food or its details didn't list that serving —
-    otherwise confirming would silently re-pin a different serving."""
     for candidate in candidates:
         if str(candidate["food_id"]) != pin["food_id"]:
             continue
@@ -168,9 +156,6 @@ def log_exact(
     quantity: float,
     page: tuple | None = None,
 ) -> dict:
-    """Logs `food` ({food_id, weight_id, name, serving}) as-is. Every logging
-    path ends here, so they all report the same result shape. `page` is an
-    already-fetched diary page for `day`."""
     diary.push_food(
         client, day, meal, food["food_id"], food["weight_id"], quantity, page
     )
@@ -252,10 +237,6 @@ BARE_QUERY_LIMIT = 10
 def _unambiguous_food(
     client, store, query: str
 ) -> tuple[dict | None, list[dict] | None]:
-    """(food, search_results). `food` is set only when the choice needs no
-    asking: a pin (no search at all) or exactly one exact-name match on the
-    search page (no details calls). Otherwise the search results come back
-    so a draft can be built without searching again."""
     pin = store.pin(query)
     if pin:
         food = {
@@ -288,9 +269,6 @@ def _unambiguous_food(
 def log_by_query(
     client, store, query: str, day: date, meal: str, quantity: float
 ) -> dict:
-    """Logs without asking only when the choice is already unambiguous: a
-    pinned food or exactly one exact-name match. Anything else returns a
-    draft to choose from and logs nothing."""
     food, search_results = _unambiguous_food(client, store, query)
     if food:
         result = log_exact(client, food, day, meal, quantity)
@@ -321,12 +299,6 @@ def modify_food(
     option: int | None = None,
     serving: int | None = None,
 ) -> dict:
-    """Replaces the diary entry matching `query` in `meal`. The replacement
-    is chosen before anything is deleted: a draft option (draft_id +
-    option), a pin, or a single exact-name match. Otherwise nothing changes
-    and a draft for the replacement comes back to choose from. Delete and
-    add share one diary page fetch; if the add fails, the delete has
-    already applied."""
     if draft_id is not None:
         if option is None:
             raise ValueError("option is required with draft_id")

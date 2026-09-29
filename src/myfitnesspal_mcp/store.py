@@ -282,8 +282,6 @@ class Store:
         name: str | None,
         serving: str | None,
     ) -> dict:
-        """Remembers which food (and serving) a phrase means, so the same
-        words log the same item next time."""
         pin = {
             "query": normalize_query(query),
             "food_id": str(food_id),
@@ -332,8 +330,6 @@ class Store:
         return cursor.rowcount
 
     def save_draft(self, body: dict, now: datetime | None = None) -> str:
-        """Stores a draft's options for a later confirm; expired drafts are
-        purged on every save."""
         created_at = now or _utc_now()
         self.conn.execute(
             "DELETE FROM food_draft WHERE created_at < ?",
@@ -348,7 +344,6 @@ class Store:
         return draft_id
 
     def draft(self, draft_id: str, now: datetime | None = None) -> dict | None:
-        """The draft body, or None when it doesn't exist or has expired."""
         row = self.conn.execute(
             "SELECT created_at, body FROM food_draft WHERE draft_id = ?",
             (draft_id,),
