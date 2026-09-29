@@ -379,13 +379,20 @@ class NoMatchingEntry(DiaryLookupError):
 
 
 class AmbiguousEntry(DiaryLookupError):
-    def __init__(self, query: str, meal: str | None, day: date, candidates: list[dict]):
+    def __init__(
+        self,
+        query: str,
+        meal: str | None,
+        day: date,
+        candidates: list[dict],
+        advice: str = "Use a more specific query to pick one.",
+    ):
         self.candidates = candidates
         where = f" in {meal}" if meal else ""
         options = "; ".join(f"{c['name']!r}" for c in candidates)
         super().__init__(
             f"'{query}'{where} on {day.isoformat()} matches multiple diary entries: "
-            f"{options}. Use a more specific query to pick one."
+            f"{options}. {advice}"
         )
 
 
@@ -591,7 +598,20 @@ def delete_exercise(client, day: date, query: str, all_matches: bool = False) ->
         if not targets:
             raise no_matching_entry(entries, query, None, day)
     else:
-        targets = [resolve_entry(entries, query, None, day)]
+        try:
+            targets = [resolve_entry(entries, query, None, day)]
+        except AmbiguousEntry as ambiguous:
+            raise AmbiguousEntry(
+                query,
+                None,
+                day,
+                ambiguous.candidates,
+                advice=(
+                    "Use a more specific query to pick one, or pass "
+                    "all_matches=True to remove every match (e.g. duplicate "
+                    "rows from a sync)."
+                ),
+            ) from None
     for entry in targets:
         remove_exercise_entry(client, entry["entry_id"], token)
     return {"day": day.isoformat(), "removed": targets, "count": len(targets)}

@@ -107,7 +107,7 @@ def test_delete_exercise_strength_entry(exercise_client):
 
 
 def test_delete_exercise_ambiguous_by_default(exercise_client):
-    with pytest.raises(diary.AmbiguousEntry):
+    with pytest.raises(diary.AmbiguousEntry, match="all_matches=True"):
         diary.delete_exercise(exercise_client, TODAY, "aerobics")
     assert _posts(exercise_client) == []
 
