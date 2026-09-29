@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- When several tool calls hit an expired session at once, only one
+  headless-browser refresh runs and the others reuse it. Previously each call
+  launched Chromium against the same profile, and every launch after the
+  first failed.
+
 ## [0.4.0] - 2026-09-28
 
 ### Added

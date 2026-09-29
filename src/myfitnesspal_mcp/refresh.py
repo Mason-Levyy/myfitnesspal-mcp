@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 from . import auth, config, mfp_client
@@ -62,11 +63,28 @@ def seed_profile(cookies: dict[str, str]) -> None:
         )
 
 
+_refresh_lock = threading.Lock()
+_completed_refreshes = 0
+
+
 def refresh_session() -> None:
     """Rotate the session by revisiting MFP in the seeded headless browser
-    profile, then persist the fresh cookies and drop the cached client."""
-    if available() and profile_seeded():
-        harvested = _visit_and_harvest(None)
-        if auth.SESSION_COOKIE in harvested:
-            auth.save_cookies(harvested)
-    mfp_client.reset()
+    profile, then persist the fresh cookies and drop the cached client.
+
+    Parallel tool calls that hit the same expired session each land here, but
+    Chromium locks its profile directory, so only one browser may run. Callers
+    that waited while another refresh ran reuse its result instead of
+    launching again."""
+    global _completed_refreshes
+    refreshes_seen = _completed_refreshes
+    with _refresh_lock:
+        if _completed_refreshes != refreshes_seen:
+            return
+        try:
+            if available() and profile_seeded():
+                harvested = _visit_and_harvest(None)
+                if auth.SESSION_COOKIE in harvested:
+                    auth.save_cookies(harvested)
+            mfp_client.reset()
+        finally:
+            _completed_refreshes += 1
