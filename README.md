@@ -1,9 +1,25 @@
-# myfitnesspal-mcp
+<div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Mason-Levyy/myfitnesspal-mcp/main/assets/wordmark-dark.png">
+  <img alt="myfitnesspal-mcp" src="https://raw.githubusercontent.com/Mason-Levyy/myfitnesspal-mcp/main/assets/wordmark-light.png" width="520">
+</picture>
+
+**Log MyFitnessPal by talking to your AI.**
+
+[![PyPI](https://img.shields.io/pypi/v/mfp-mcp?color=0a64e6)](https://pypi.org/project/mfp-mcp/)
+[![GitHub stars](https://img.shields.io/github/stars/Mason-Levyy/myfitnesspal-mcp?style=flat&color=0a64e6)](https://github.com/Mason-Levyy/myfitnesspal-mcp/stargazers)
 [![CI](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/mfp-mcp)](https://pypi.org/project/mfp-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/mfp-mcp)](https://pypi.org/project/mfp-mcp/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/LICENSE)
+
+[Quickstart](#quickstart) · [Tools](#tools) · [Authentication](#authentication) · [Changelog](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/CHANGELOG.md)
+
+<img alt="Demo: logging a banana takes 14 taps in the app and 2 with myfitnesspal-mcp" src="https://raw.githubusercontent.com/Mason-Levyy/myfitnesspal-mcp/main/assets/demo.gif" width="720">
+
+<sub>▶ [Watch with sound (MP4)](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/assets/demo.mp4)</sub>
+
+</div>
 
 Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
 the food database with macros, track trends, and export your nutrition history, all against your real MyFitnessPal diary.
@@ -16,8 +32,6 @@ Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
 > web app's own endpoints. It can break whenever MFP changes their site. Use at
 > your own risk, with your own account.
 
-![quick demo](demo.gif)
-
 ## Why this one?
 
 MyFitnessPal moved behind Cloudflare + NextAuth, which broke the
@@ -25,11 +39,11 @@ username/password login that most existing integrations rely on. This server:
 
 - **Authenticates with your browser session cookie** over a real Chrome TLS
   fingerprint ([curl_cffi](https://github.com/lexiforest/curl_cffi)), which
-  passes Cloudflare.
+  passes Cloudflare
 - **Auto-refreshes the session** (optional): a headless browser profile rotates
-  the token when it expires, and failed calls retry automatically.
-- **Writes, not just reads**: log, modify, and delete real diary entries.
-- **Search-then-log**: get candidates with macros, then log the exact item.
+  the token when it expires, and failed calls retry automatically
+- **Writes, not just reads**: log, modify, and delete real diary entries
+- **Search-then-log**: get candidates with macros, then log the exact item
 
 ## Quickstart
 
@@ -69,20 +83,16 @@ streamable HTTP works, not just Claude.
 
 ## Authentication
 
-MyFitnessPal killed headless password login, so this uses your browser's
+MyFitnessPal uses your browser's
 session cookie:
 
-1. Log in at [myfitnesspal.com](https://www.myfitnesspal.com).
+1. Log in at [myfitnesspal.com](https://www.myfitnesspal.com)
 2. Open DevTools (F12) → **Application** (Chrome) or **Storage** (Firefox) →
-   **Cookies** → `https://www.myfitnesspal.com`.
-3. Copy the value of `__Secure-next-auth.session-token`.
-4. Paste it into the `mfp-mcp auth` prompt (input is hidden).
+   **Cookies** → `https://www.myfitnesspal.com`
+3. Copy the value of `__Secure-next-auth.session-token`
+4. Paste it into the `mfp-mcp auth` prompt
 
-Pasting the entire `Cookie:` header from any request in the Network tab also
-works. Cookies are stored with owner-only permissions in your platform config
-dir, or supply them via the `MFP_COOKIE` environment variable instead.
-
-Sessions last around 30 days. When one expires, either re-run `auth` — or
+Sessions last around 30 days. When one expires, either re-run `auth` or
 enable auto-refresh so you never have to.
 
 ### Auto-refresh (recommended)
@@ -163,7 +173,7 @@ of silently logging into the wrong section.
 
 Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
-per day — subsequent calls are fast).
+per day).
 
 Water logging reads the day's current total from `/food/water`, adds the requested
 quantity, and posts the new total back to the same endpoint. Pass
