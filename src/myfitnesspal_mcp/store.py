@@ -317,7 +317,7 @@ class Store:
             "SELECT query, food_id, weight_id, name, serving, updated_at "
             "FROM food_pin ORDER BY query"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(pin_row) for pin_row in rows]
 
     def clear_pin(self, query: str) -> bool:
         cursor = self.conn.execute(

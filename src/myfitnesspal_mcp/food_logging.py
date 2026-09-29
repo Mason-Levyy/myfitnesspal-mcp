@@ -117,7 +117,11 @@ def _build_draft(
         "day": day.isoformat(),
         "meal": meal,
         "quantity": quantity,
-        "targets": {k: v for k, v in asdict(targets).items() if v is not None},
+        "targets": {
+            bound: limit_value
+            for bound, limit_value in asdict(targets).items()
+            if limit_value is not None
+        },
         "options": options,
     }
     return store.save_draft(body), body
