@@ -1,7 +1,36 @@
 import datetime
 import sqlite3
+import threading
+from pathlib import Path
 
 import pytest
+
+
+def test_reads_never_see_a_half_replaced_diary():
+    """A tool reading the day while a sync rewrites it shares the connection,
+    so it must not observe the gap between replace_diary's DELETE and INSERT."""
+    from myfitnesspal_mcp.store import Store
+
+    store = Store(Path(":memory:"))
+    day = "2026-07-01"
+    entries = [{"meal": "Lunch", "name": f"Item {index}"} for index in range(3)]
+    store.replace_diary(day, entries)
+    writing = threading.Event()
+    writing.set()
+
+    def rewrite_repeatedly():
+        while writing.is_set():
+            store.replace_diary(day, entries)
+
+    writer = threading.Thread(target=rewrite_repeatedly)
+    writer.start()
+    try:
+        observed_sizes = {len(store.diary(day)) for _ in range(500)}
+    finally:
+        writing.clear()
+        writer.join(5)
+
+    assert observed_sizes == {3}
 
 
 def test_upsert_nutrition_partial_updates(store):

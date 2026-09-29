@@ -22,6 +22,9 @@ All notable changes to this project are documented here. The format follows
   instead of `/food/diary/{username}?date=`. Since 2026-09-30 MyFitnessPal
   answers the username form with its marketing homepage, which made every
   diary write fail as signed out and let syncs cache days as empty (#24).
+- Parallel tool calls on the first request of the day fetch the sync window
+  from MyFitnessPal once instead of once per call, and no longer read a day's
+  diary while a sync is rewriting it.
 
 ## [0.4.0] - 2026-09-28
 

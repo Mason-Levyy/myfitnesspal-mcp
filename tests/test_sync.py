@@ -1,4 +1,5 @@
 import datetime
+import threading
 
 import pytest
 from myfitnesspal.exceptions import MyfitnesspalLoginError
@@ -123,6 +124,32 @@ def test_poll_skips_when_synced_today(store, monkeypatch):
     assert client.fetched == []
     sync.poll(store, client, force=True, days=1, today=TODAY)
     assert client.fetched != []
+
+
+def test_concurrent_polls_fetch_once(store):
+    """Parallel tool calls on a fresh day both see an unsynced cache; the
+    second must wait for the first poll rather than refetch the window."""
+    today_fetch_started = threading.Event()
+    let_fetch_finish = threading.Event()
+
+    class SlowClient(FakeSyncClient):
+        def get_date(self, day):
+            if day == TODAY:
+                today_fetch_started.set()
+                let_fetch_finish.wait(5)
+            return super().get_date(day)
+
+    client = SlowClient()
+    first = threading.Thread(target=sync.poll, args=(store, client, 2, False, TODAY))
+    first.start()
+    assert today_fetch_started.wait(5)
+    second = threading.Thread(target=sync.poll, args=(store, client, 2, False, TODAY))
+    second.start()
+    let_fetch_finish.set()
+    first.join(5)
+    second.join(5)
+
+    assert client.fetched.count(TODAY) == 1
 
 
 def test_poll_records_weights(store):
