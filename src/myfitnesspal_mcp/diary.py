@@ -446,20 +446,6 @@ def delete_food(
     return {"removed": entry["name"], "meal": entry["meal"]}
 
 
-def modify_food(
-    client,
-    day: date,
-    meal: str,
-    query: str,
-    new_query: str | None = None,
-    quantity: float = 1.0,
-) -> dict:
-    page = diary_page(client, day)
-    removed = delete_food(client, day, query, meal, page=page)
-    added = push_food(client, day, meal, new_query or query, quantity, page=page)
-    return {"removed": removed["removed"], "added": added["matched"], "meal": meal}
-
-
 def set_weight(client, day: date, value: float) -> dict:
     """Value is in the account's display unit (kg or lbs) — the v2 API stores
     and echoes whatever unit the account is configured with."""

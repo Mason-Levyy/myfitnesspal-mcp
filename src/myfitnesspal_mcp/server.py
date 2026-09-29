@@ -312,8 +312,11 @@ async def fitness_modify_food(
     query: str,
     new_query: str | None = None,
     meal: str = "breakfast",
-    quantity: float = 1.0,
+    quantity: float | None = None,
     date: str | None = None,
+    draft_id: str | None = None,
+    option: int | None = None,
+    serving: int | None = None,
     ctx: Context = None,
 ) -> dict:
     """Replace a MyFitnessPal diary entry: deletes the match, then adds a food.
@@ -324,16 +327,33 @@ async def fitness_modify_food(
     none is an exact name match), the error lists the candidates; narrow `query`
     to pick one.
     new_query: the food to add instead; omit to re-add `query` (e.g. to change
-    quantity). meal: breakfast|lunch|dinner|snacks or any meal name on the
-    account, used for both the delete and the add. date: YYYY-MM-DD
-    (default: today).
+    quantity). The replacement is chosen like fitness_log_food's: a pinned
+    food or a single exact-name match is used directly; otherwise nothing is
+    changed and a draft comes back (needs_choice=true) — call again with the
+    same query plus draft_id + option (and optionally serving).
+    meal: breakfast|lunch|dinner|snacks or any meal name on the account,
+    used for both the delete and the add. quantity: servings (default 1, or
+    the draft's). date: YYYY-MM-DD (default: today).
     """
     day = parse_day(date)
 
     def op(store, client):
-        return diary.modify_food(client, day, meal, query, new_query, quantity)
+        return food_logging.modify_food(
+            client,
+            store,
+            day,
+            meal,
+            query,
+            new_query,
+            quantity,
+            draft_id=draft_id,
+            option=option,
+            serving=serving,
+        )
 
     result = await with_session(ctx, op)
+    if result.get("needs_choice"):
+        return {"ok": True, **result}
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
 
 

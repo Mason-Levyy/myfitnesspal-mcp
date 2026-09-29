@@ -478,17 +478,6 @@ def test_delete_food_no_match(client):
         diary.delete_food(client, TODAY, "coffee", meal="dinner")
 
 
-def test_modify_food_deletes_then_adds(client):
-    result = diary.modify_food(client, TODAY, "breakfast", "coffee", "banana")
-    assert result == {
-        "removed": "Coffee, 1 cup",
-        "added": "Banana",
-        "meal": "breakfast",
-    }
-    diary_fetches = [url for _, url, _ in client.session.calls if "food/diary" in url]
-    assert len(diary_fetches) == 1
-
-
 def test_get_note_double_unescapes_body(client, make_response):
     client.session.route(
         "GET", "food/note", make_response(json_data={"item": {"body": "a &amp;amp; b"}})

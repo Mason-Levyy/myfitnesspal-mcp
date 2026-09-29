@@ -310,3 +310,61 @@ def log_by_query(
         search_results,
     )
     return {"logged": None, "needs_choice": True, **_draft_view(draft_id, body)}
+
+
+def modify_food(
+    client,
+    store,
+    day: date,
+    meal: str,
+    query: str,
+    new_query: str | None = None,
+    quantity: float | None = None,
+    draft_id: str | None = None,
+    option: int | None = None,
+    serving: int | None = None,
+) -> dict:
+    """Replaces the diary entry matching `query` in `meal`. The replacement
+    is chosen before anything is deleted: a draft option (draft_id +
+    option), a pin, or a single exact-name match. Otherwise nothing changes
+    and a draft for the replacement comes back to choose from. Delete and
+    add share one diary page fetch; if the add fails, the delete has
+    already applied."""
+    if draft_id is not None:
+        if option is None:
+            raise ValueError("option is required with draft_id")
+        page = diary.diary_page(client, day)
+        removed = diary.delete_food(client, day, query, meal, page=page)
+        added = log_from_draft(
+            client, store, draft_id, option, serving, quantity, meal, day, page=page
+        )
+        return {"removed": removed["removed"], **added}
+    replacement_query = new_query or query
+    chosen_quantity = 1.0 if quantity is None else quantity
+    food, search_results = _unambiguous_food(client, store, replacement_query)
+    if food is None:
+        draft_id, body = _build_draft(
+            client,
+            store,
+            replacement_query,
+            day,
+            meal,
+            chosen_quantity,
+            MacroTargets(),
+            BARE_QUERY_LIMIT,
+            search_results,
+        )
+        return {
+            "removed": None,
+            "logged": None,
+            "needs_choice": True,
+            "next_step": (
+                "nothing was changed; call fitness_modify_food again with the "
+                "same query plus draft_id and option"
+            ),
+            **_draft_view(draft_id, body),
+        }
+    page = diary.diary_page(client, day)
+    removed = diary.delete_food(client, day, query, meal, page=page)
+    added = log_exact(client, food, day, meal, chosen_quantity, page)
+    return {"removed": removed["removed"], **added, "source": food["source"]}

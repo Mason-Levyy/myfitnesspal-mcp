@@ -182,3 +182,56 @@ def test_pinned_food_missing_from_search_still_offered_first(client, store):
     assert first["pinned"] is True
     assert first["name"] == "Banana, organic"
     assert first["servings"][0]["label"] == "1 small"
+
+
+def _posts_to(client, fragment):
+    return [call for call in _food_adds(client) if fragment in call[1]]
+
+
+def test_modify_replaces_with_exact_match_using_one_diary_fetch(banana_details, store):
+    result = food_logging.modify_food(
+        banana_details, store, TODAY, "breakfast", "coffee", "banana"
+    )
+    assert result["removed"] == "Coffee, 1 cup"
+    assert result["logged"] == "Banana"
+    assert result["source"] == "exact_match"
+    assert len(_posts_to(banana_details, "food/remove")) == 1
+    assert len(_posts_to(banana_details, "food/add")) == 1
+    diary_fetches = [
+        url for _, url, _ in banana_details.session.calls if "food/diary" in url
+    ]
+    assert len(diary_fetches) == 1
+
+
+def test_modify_uses_pin_for_replacement(client, store):
+    store.set_pin("protein shake", "555", "77", "Whey Shake", "1 scoop")
+    result = food_logging.modify_food(
+        client, store, TODAY, "breakfast", "coffee", "Protein  Shake"
+    )
+    assert result["source"] == "pin"
+    _, _, kwargs = _posts_to(client, "food/add")[-1]
+    assert kwargs["data"]["food_entry[food_id]"] == "555"
+    assert kwargs["data"]["food_entry[weight_id]"] == "77"
+
+
+def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
+    result = food_logging.modify_food(
+        banana_details, store, TODAY, "breakfast", "coffee", "bread"
+    )
+    assert result["needs_choice"] is True
+    assert result["removed"] is None
+    assert _food_adds(banana_details) == []
+
+    confirmed = food_logging.modify_food(
+        banana_details,
+        store,
+        TODAY,
+        "breakfast",
+        "coffee",
+        draft_id=result["draft_id"],
+        option=1,
+    )
+    assert confirmed["removed"] == "Coffee, 1 cup"
+    assert confirmed["source"] == "draft"
+    assert len(_posts_to(banana_details, "food/remove")) == 1
+    assert len(_posts_to(banana_details, "food/add")) == 1
