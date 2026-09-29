@@ -311,26 +311,14 @@ def push_food(
     client,
     day: date,
     meal: str,
-    query: str,
+    food_id: str,
+    weight_id: str,
     quantity: float = 1.0,
-    food_id: str | None = None,
-    weight_id: str | None = None,
     page: tuple | None = None,
-) -> dict:
+) -> None:
     doc, csrf = page or diary_page(client, day)
     meal_id, _ = resolve_meal(doc, meal)
-    if food_id is not None and weight_id is not None:
-        matched = query
-    else:
-        results, _ = food_search(client, query)
-        if not results:
-            raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
-        top = results[0]
-        food_id = top["food_id"]
-        weight_id = top["weight_id"]
-        matched = top["name"]
     add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
-    return {"matched": matched, "food_id": food_id}
 
 
 def diary_page(client, day: date):

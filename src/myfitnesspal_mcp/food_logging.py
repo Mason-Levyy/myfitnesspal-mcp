@@ -168,14 +168,7 @@ def log_exact(
     path ends here, so they all report the same result shape. `page` is an
     already-fetched diary page for `day`."""
     diary.push_food(
-        client,
-        day,
-        meal,
-        food["name"],
-        quantity,
-        food_id=food["food_id"],
-        weight_id=food["weight_id"],
-        page=page,
+        client, day, meal, food["food_id"], food["weight_id"], quantity, page
     )
     return {
         "logged": food["name"],
