@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_log_water`: add water to MyFitnessPal's water tracker in cups,
+  fluid ounces, millilitres, or litres (common spellings accepted), or set the
+  day's total with `replace=True`.
 - `fitness_draft_food`: numbered food options with every serving size and
   whole-entry macros, ranked deterministically and filtered by optional
   min/max calorie, protein, carb, and fat targets; stored as a 24-hour draft.
