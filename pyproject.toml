@@ -42,6 +42,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/myfitnesspal_mcp"]
 
+[tool.hatch.build.targets.sdist]
+# README media is served from GitHub to keep videos off of PyPI.
+exclude = ["assets"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
