@@ -415,6 +415,53 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
 
 
 @mcp.tool()
+async def fitness_get_exercise_entries(
+    date: str | None = None, ctx: Context = None
+) -> dict:
+    """List a day's cardio and strength exercise-diary entries.
+
+    Each entry has its section, name, and that section's columns (cardio:
+    minutes, calories_burned; strength: sets, reps_set, weight_set). entry_id
+    is informational only — fitness_delete_exercise deletes by name match.
+    date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        doc, _ = diary.exercise_page(client, day)
+        return {"day": day.isoformat(), "entries": diary.exercise_entries(doc)}
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
+async def fitness_delete_exercise(
+    query: str,
+    date: str | None = None,
+    all_matches: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Remove exercise-diary entries by name match (case-insensitive).
+
+    query: text matched against logged exercise names. By default deletes
+    exactly one entry, like fitness_delete_food: an exact name match wins;
+    otherwise several matches raise an error listing the candidates, and no
+    match raises an error listing what's actually logged.
+    all_matches: delete every entry whose name contains `query` — for
+    cleaning up syncs that log one workout as several same-named rows
+    (e.g. Garmin's "Aerobics, general"). Check fitness_get_exercise_entries
+    first; a short query can match many entries.
+    date: YYYY-MM-DD (default: today).
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return diary.delete_exercise(client, day, query, all_matches=all_matches)
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool()
 async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal daily diary note (the free-text 'Notes' box at the
     bottom of the day) straight from your account.

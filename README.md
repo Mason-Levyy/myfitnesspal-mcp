@@ -115,6 +115,8 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
 | `fitness_log_water` | Add water (cups, fl oz, mL, L) or set the day's total with `replace` |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
+| `fitness_get_exercise_entries` | List cardio and strength entries with each section's columns |
+| `fitness_delete_exercise` | Remove an exercise entry by name match (`all_matches` for multi-row sync cleanup) |
 | `fitness_get_note` | Read the MyFitnessPal daily diary note (the "Notes" box) for a day |
 | `fitness_log_note` | Write that daily note to MFP (replace, or `append` a new line) |
 | `fitness_log_feel` | Save a subjective "how I feel" note (stored locally, never sent to MFP) |
