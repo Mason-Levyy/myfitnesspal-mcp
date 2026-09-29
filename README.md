@@ -113,6 +113,7 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_delete_food` | Remove a diary entry by name match |
 | `fitness_modify_food` | Replace an entry (or change its quantity), choosing the replacement like `fitness_log_food` |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
+| `fitness_log_water` | Add water (cups, fl oz, mL, L) or set the day's total with `replace` |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
 | `fitness_get_exercise_entries` | List cardio and strength entries with each section's columns |
 | `fitness_delete_exercise` | Remove an exercise entry by name match (`all_matches` for multi-row sync cleanup) |
@@ -164,10 +165,13 @@ Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
 per day — subsequent calls are fast).
 
-Water intake is read-only (it appears in day summaries): MyFitnessPal's water
-*write* isn't exposed on any endpoint we've found — `/food/water` accepts POSTs
-but ignores them. If you capture the real call in your browser, a PR is very
-welcome.
+Water logging reads the day's current total from `/food/water`, adds the requested
+quantity, and posts the new total back to the same endpoint. Pass
+`replace=True` to set the day's total outright (e.g. to fix a mislogged amount);
+every call returns `previous_ml`, so a mistake can be reverted by passing it
+back as `amount` with `unit="ml"` and `replace=True`. The separate
+`/stats` request with a `water_logged` event is analytics telemetry; it does not
+persist the water total.
 
 ## Remote / HTTP mode
 
@@ -212,8 +216,8 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
   through with just the NextAuth session cookie.
 - Writes replicate the web app's own XHR calls: the legacy food-search page
   supplies the `food_id`/`weight_id` that `/food/add` accepts, deletes go
-  through `/food/remove`, and the daily note reads/writes via `/food/note` —
-  each with the page CSRF token.
+  through `/food/remove`, water reads/writes via `/food/water`, and the daily
+  note reads/writes via `/food/note` — each with the page CSRF token.
 - Day summaries, trends, and exports read a local SQLite cache that gap-fills
   missing days. The MyFitnessPal daily note syncs both ways; feel notes are
   local-only.
