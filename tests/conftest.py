@@ -76,6 +76,11 @@ def diary_html():
 
 
 @pytest.fixture
+def custom_meals_diary_html():
+    return (FIXTURES / "diary_custom_meals.html").read_text()
+
+
+@pytest.fixture
 def client(search_html, diary_html):
     fake = FakeClient()
     fake.session.route("GET", "food/search", FakeResponse(text=search_html))

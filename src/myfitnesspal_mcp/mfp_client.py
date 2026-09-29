@@ -6,7 +6,7 @@ import myfitnesspal
 from curl_cffi import requests as cffi_requests
 from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from . import auth, config
+from . import auth, config, diary
 
 RECONNECT_HINT = (
     "MyFitnessPal session expired or not connected. "
@@ -27,6 +27,10 @@ _AUTH_ERROR_PATTERN = re.compile(
 def is_auth_error(exc: Exception) -> bool:
     if isinstance(exc, (NotConnectedError, MyfitnesspalLoginError)):
         return True
+    if isinstance(exc, diary.DiarySignedOut):
+        return True
+    if isinstance(exc, diary.DiaryLookupError):
+        return False
     return bool(_AUTH_ERROR_PATTERN.search(str(exc)))
 
 
