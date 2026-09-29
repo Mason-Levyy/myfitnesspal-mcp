@@ -13,24 +13,63 @@ from urllib import parse
 
 from lxml import html as lh
 
-MEAL_INDEX = {
-    "breakfast": "0",
-    "lunch": "1",
-    "dinner": "2",
-    "snacks": "3",
-    "snack": "3",
-}
-
-MEALS = ("breakfast", "lunch", "dinner", "snacks")
-
 MEAL_ALIASES = {"snack": "snacks"}
+
+DEFAULT_MEAL_POSITIONS = {"breakfast": 0, "lunch": 1, "dinner": 2, "snacks": 3}
+
+
+def _collapse_whitespace(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _normalize_meal(meal: str | None) -> str | None:
     if meal is None:
         return None
-    lowered = meal.lower()
+    lowered = _collapse_whitespace(meal).lower()
     return MEAL_ALIASES.get(lowered, lowered)
+
+
+class DiaryLookupError(RuntimeError):
+    pass
+
+
+class UnknownMeal(DiaryLookupError):
+    pass
+
+
+class DiarySignedOut(RuntimeError):
+    pass
+
+
+def _is_meal_header(row) -> bool:
+    return "meal_header" in (row.get("class") or "")
+
+
+def _header_label(header_row, position: int) -> str:
+    cells = header_row.xpath("./td")
+    name = _collapse_whitespace(cells[0].text_content()) if cells else ""
+    return name or f"Meal {position + 1}"
+
+
+def meal_headers(doc) -> list[str]:
+    header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
+    return [_header_label(row, position) for position, row in enumerate(header_rows)]
+
+
+def resolve_meal(doc, meal: str) -> tuple[str, str]:
+    headers = meal_headers(doc)
+    target = _normalize_meal(meal)
+    for position, header in enumerate(headers):
+        if _normalize_meal(header) == target:
+            return str(position), header
+    default_position = DEFAULT_MEAL_POSITIONS.get(target)
+    if default_position is not None and default_position < len(headers):
+        header_at_default = headers[default_position]
+        if _normalize_meal(header_at_default) not in DEFAULT_MEAL_POSITIONS:
+            return str(default_position), header_at_default
+    raise UnknownMeal(
+        f"no MyFitnessPal meal named {meal!r}. Configured meals: " + ", ".join(headers)
+    )
 
 
 def api_headers(client, extra: dict | None = None) -> dict:
@@ -49,6 +88,7 @@ def _result_extras(anchor) -> dict:
     extras = {
         "external_id": anchor.get("data-external-id"),
         "brand": None,
+        "serving": None,
         "calories": None,
     }
     containers = anchor.xpath("ancestor::li[1]")
@@ -60,6 +100,8 @@ def _result_extras(anchor) -> dict:
     parts = info[0].text.strip().split(",")
     if len(parts) >= 3:
         extras["brand"] = " ".join(parts[0:-2]).strip()
+    if len(parts) >= 2:
+        extras["serving"] = parts[-2].strip() or None
     calories_text = parts[-1].replace("calories", "").strip()
     try:
         extras["calories"] = float(calories_text)
@@ -89,6 +131,7 @@ def food_search(client, query: str):
         result = {
             "food_id": anchor.get("data-original-id"),
             "weight_id": weight_ids[0],
+            "weight_ids": weight_ids,
             "name": anchor.text_content().strip(),
         }
         result.update(_result_extras(anchor))
@@ -98,11 +141,97 @@ def food_search(client, query: str):
     return results, None
 
 
-def _serving_label(serving_sizes: list) -> str | None:
-    if not serving_sizes:
+def serving_label(serving: dict) -> str | None:
+    parts = []
+    value = serving.get("value")
+    if isinstance(value, (int, float)):
+        parts.append(f"{value:g}")
+    elif value is not None:
+        parts.append(str(value))
+    if serving.get("unit"):
+        parts.append(str(serving["unit"]))
+    return " ".join(parts) or None
+
+
+def _nutrition_multiplier(serving: dict) -> float | None:
+    try:
+        return float(serving["nutrition_multiplier"])
+    except (KeyError, TypeError, ValueError):
         return None
-    first = serving_sizes[0]
-    return f"{first.get('value')} {first.get('unit')}".strip()
+
+
+def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict]:
+    if len(weight_ids) != len(serving_sizes):
+        return []
+    servings = []
+    for weight_id, serving in zip(weight_ids, serving_sizes, strict=True):
+        if not isinstance(serving, dict):
+            continue
+        multiplier = _nutrition_multiplier(serving)
+        label = serving_label(serving)
+        if multiplier is None or label is None:
+            continue
+        servings.append(
+            {"weight_id": weight_id, "label": label, "nutrition_multiplier": multiplier}
+        )
+    return servings
+
+
+def food_details(client, external_id: str | None) -> dict | None:
+    if not external_id:
+        return None
+    try:
+        details = client._get_food_item_details(int(external_id))
+        nutrition = details["nutrition"]
+        return {
+            "verified": details.get("verified"),
+            "nutrition": {
+                "calories": details["calories"],
+                "protein": nutrition.get("protein"),
+                "carbs": nutrition.get("carbohydrates"),
+                "fat": nutrition.get("fat"),
+            },
+            "serving_sizes": details.get("serving_sizes") or [],
+        }
+    except Exception:
+        return None
+
+
+def food_candidates(
+    client, query: str, limit: int = 10, search_results: list[dict] | None = None
+) -> list[dict]:
+    if search_results is None:
+        search_results, _ = food_search(client, query)
+    candidates = []
+    for search_rank, result in enumerate(search_results[:limit]):
+        candidate = {
+            "food_id": result["food_id"],
+            "name": result["name"],
+            "brand": result["brand"],
+            "verified": None,
+            "search_rank": search_rank,
+            "nutrition": {"calories": result["calories"]},
+            "servings": [],
+            "default_weight_id": result["weight_id"],
+        }
+        details = food_details(client, result["external_id"])
+        if details:
+            candidate["verified"] = details["verified"]
+            candidate["nutrition"] = details["nutrition"]
+            candidate["servings"] = pair_servings(
+                result["weight_ids"], details["serving_sizes"]
+            )
+        if not candidate["servings"]:
+            candidate["nutrition"] = {"calories": result["calories"]}
+            candidate["servings"] = [
+                {
+                    "weight_id": result["weight_id"],
+                    "label": result["serving"] or "default serving",
+                    "nutrition_multiplier": 1.0,
+                }
+            ]
+        candidates.append(candidate)
+    return candidates
 
 
 def search_food(
@@ -123,23 +252,19 @@ def search_food(
             "food_id": result["food_id"],
             "weight_id": result["weight_id"],
         }
-        if with_macros and result["external_id"]:
-            try:
-                details = client._get_food_item_details(int(result["external_id"]))
-                nutrition = details["nutrition"]
-                candidate["calories"] = details["calories"]
-                candidate["protein"] = nutrition.get("protein")
-                candidate["carbs"] = nutrition.get("carbohydrates")
-                candidate["fat"] = nutrition.get("fat")
-                candidate["serving"] = _serving_label(details["serving_sizes"])
-                candidate["verified"] = details["verified"]
-            except Exception:
-                pass
+        details = food_details(client, result["external_id"]) if with_macros else None
+        if details:
+            candidate.update(details["nutrition"])
+            candidate["verified"] = details["verified"]
+            if details["serving_sizes"]:
+                candidate["serving"] = serving_label(details["serving_sizes"][0])
         candidates.append(candidate)
     return candidates
 
 
-def add_food_to_diary(client, food_id, weight_id, csrf, meal: str, day: date, quantity):
+def add_food_to_diary(
+    client, food_id, weight_id, csrf, meal_id: str, day: date, quantity
+):
     resp = client.session.post(
         parse.urljoin(client.BASE_URL_SECURE, "food/add"),
         data={
@@ -147,7 +272,7 @@ def add_food_to_diary(client, food_id, weight_id, csrf, meal: str, day: date, qu
             "food_entry[date]": day.isoformat(),
             "food_entry[quantity]": str(quantity),
             "food_entry[weight_id]": str(weight_id),
-            "food_entry[meal_id]": MEAL_INDEX.get(meal.lower(), "0"),
+            "food_entry[meal_id]": meal_id,
             "ajax": "true",
         },
         headers=api_headers(
@@ -169,28 +294,14 @@ def push_food(
     client,
     day: date,
     meal: str,
-    query: str,
+    food_id: str,
+    weight_id: str,
     quantity: float = 1.0,
-    food_id: str | None = None,
-    weight_id: str | None = None,
-) -> dict:
-    if food_id is not None and weight_id is not None:
-        _, csrf = diary_page(client, day)
-        matched = query
-    else:
-        results, csrf = food_search(client, query)
-        if not results:
-            raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
-        top = results[0]
-        food_id = top["food_id"]
-        weight_id = top["weight_id"]
-        matched = top["name"]
-    if not csrf:
-        raise RuntimeError(
-            "couldn't read the MyFitnessPal csrf token (try re-authenticating)"
-        )
-    add_food_to_diary(client, food_id, weight_id, csrf, meal, day, quantity)
-    return {"matched": matched, "food_id": food_id}
+    page: tuple | None = None,
+) -> None:
+    doc, csrf = page or diary_page(client, day)
+    meal_id, _ = resolve_meal(doc, meal)
+    add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
 
 
 def diary_page(client, day: date):
@@ -204,24 +315,24 @@ def diary_page(client, day: date):
     tokens = doc.xpath("//meta[@name='csrf-token']/@content")
     if not tokens:
         raise RuntimeError("couldn't read the MyFitnessPal csrf token")
+    if not meal_headers(doc):
+        raise DiarySignedOut(
+            "the MyFitnessPal diary page has no meal sections; the login "
+            "session has likely expired"
+        )
     return doc, tokens[0]
 
 
 def diary_entries(doc) -> list[dict]:
-    """Walks the diary table: meal_header rows delimit meals; the
-    data-food-entry-id anchors that follow belong to that meal."""
     entries = []
     current_meal = None
-    for tr in doc.xpath("//tr"):
-        classes = tr.get("class") or ""
-        if "meal_header" in classes:
-            header = " ".join(t.strip() for t in tr.xpath(".//text()") if t.strip())
-            if header:
-                current_meal = header.split()[0].lower()
-            else:
-                current_meal = None
+    meal_position = -1
+    for row in doc.xpath("//tr"):
+        if _is_meal_header(row):
+            meal_position += 1
+            current_meal = _normalize_meal(_header_label(row, meal_position))
             continue
-        anchors = tr.xpath(".//a[@data-food-entry-id]")
+        anchors = row.xpath(".//a[@data-food-entry-id]")
         if anchors:
             entries.append(
                 {
@@ -263,11 +374,11 @@ def remove_entry(client, entry_id: str, token: str) -> None:
         )
 
 
-class NoMatchingEntry(RuntimeError):
+class NoMatchingEntry(DiaryLookupError):
     pass
 
 
-class AmbiguousEntry(RuntimeError):
+class AmbiguousEntry(DiaryLookupError):
     def __init__(self, query: str, meal: str | None, day: date, candidates: list[dict]):
         self.candidates = candidates
         where = f" in {meal}" if meal else ""
@@ -302,26 +413,14 @@ def no_matching_entry(
     )
 
 
-def delete_food(client, day: date, query: str, meal: str | None = None) -> dict:
-    doc, token = diary_page(client, day)
-    entry = resolve_entry(diary_entries(doc), query, meal, day)
+def delete_food(
+    client, day: date, query: str, meal: str | None = None, page: tuple | None = None
+) -> dict:
+    doc, token = page or diary_page(client, day)
+    label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
+    entry = resolve_entry(diary_entries(doc), query, label, day)
     remove_entry(client, entry["entry_id"], token)
     return {"removed": entry["name"], "meal": entry["meal"]}
-
-
-def modify_food(
-    client,
-    day: date,
-    meal: str,
-    query: str,
-    new_query: str | None = None,
-    quantity: float = 1.0,
-) -> dict:
-    """Delete + add are sequential; if the add fails the delete has already
-    applied."""
-    removed = delete_food(client, day, query, meal)
-    added = push_food(client, day, meal, new_query or query, quantity)
-    return {"removed": removed["removed"], "added": added["matched"], "meal": meal}
 
 
 def set_weight(client, day: date, value: float) -> dict:

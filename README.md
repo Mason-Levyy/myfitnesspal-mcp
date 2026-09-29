@@ -106,9 +106,12 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | --- | --- |
 | `fitness_get_day` | Nutrition totals, diary entries, the MFP daily note, and feel note for a day |
 | `fitness_search_food` | Candidate matches with brand, calories, macros, serving, and ids |
-| `fitness_log_food` | Log a food to the real diary (top match, or an exact search candidate) |
+| `fitness_draft_food` | Numbered options with every serving size, filtered/ranked by optional calorie and macro targets |
+| `fitness_log_food` | Log a draft option (and serving), a remembered food, or exact ids to the real diary |
+| `fitness_list_food_pins` | Remembered query → food/serving choices (local) |
+| `fitness_clear_food_pin` | Forget one remembered choice, or all of them |
 | `fitness_delete_food` | Remove a diary entry by name match |
-| `fitness_modify_food` | Replace an entry (or change its quantity) |
+| `fitness_modify_food` | Replace an entry (or change its quantity), choosing the replacement like `fitness_log_food` |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
 | `fitness_get_exercise_entries` | List cardio and strength entries with each section's columns |
@@ -119,9 +122,43 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_get_trends` | One metric over a date range: weight, calories_in, protein, carbs, fat |
 | `fitness_bulk_export` | Whole date range in one call, for analysis |
 
-The high-accuracy logging flow: `fitness_search_food("greek yogurt")` returns
-candidates with macros and a `food_id`/`weight_id`; pass those to
-`fitness_log_food` to log exactly that item instead of trusting the top match.
+### Logging flow
+
+Food logging is draft-then-confirm, so what lands in your diary never
+depends on MyFitnessPal's search order:
+
+1. `fitness_draft_food("greek yogurt", min_protein=15, max_calories=150)`
+   returns numbered options. Each lists every serving size with calories and
+   macros for the whole entry (serving × quantity) plus a suggested serving;
+   options that meet the targets come first, near misses follow. Call it
+   again with different targets to refine.
+2. `fitness_log_food(draft_id=..., option=2, serving=1)` logs exactly that
+   food and serving, and remembers the choice for that query.
+3. Next time, `fitness_log_food(query="greek yogurt")` logs the remembered
+   food and serving without searching.
+
+A bare `fitness_log_food(query=...)` with nothing remembered logs only when
+exactly one result matches the name exactly; otherwise it logs nothing and
+returns a draft to choose from. Remembered choices live in the local cache
+(`fitness_list_food_pins`, `fitness_clear_food_pin`). Drafts expire after 24
+hours.
+
+`fitness_modify_food` picks the replacement the same way, before deleting
+anything: a remembered food or a single exact-name match is used directly;
+otherwise the entry is left alone and a draft comes back — call
+`fitness_modify_food` again with the same `query` plus `draft_id` and
+`option`.
+
+`fitness_log_food`, `fitness_delete_food`, and `fitness_modify_food` all take
+a `meal` argument the same way: `breakfast`/`lunch`/`dinner`/`snacks`, or the
+literal name of any meal section currently on your diary — including a
+renamed default meal or one of the up to two extra meals MyFitnessPal lets
+you add in Diary Settings. Matching is case-insensitive against your
+account's current meal labels. If you renamed a default meal, the keywords
+still work: `breakfast`/`lunch`/`dinner`/`snacks` fall back to your first
+through fourth meal, unless that slot now carries a different default name
+(e.g. `lunch` won't land in a second meal you renamed to "Dinner"). Any other unrecognized `meal` raises an error instead
+of silently logging into the wrong section.
 
 Day summaries and trends read from a local SQLite cache that gap-fills from
 MyFitnessPal (first call on a fresh install fetches up to 30 days, one request
