@@ -140,6 +140,31 @@ def test_bare_query_logs_single_exact_match(banana_details, store):
     assert store.pin("banana") is None
 
 
+def test_bare_exact_match_skips_details_calls(banana_details, store, monkeypatch):
+    def details_must_not_run(external_id):
+        raise AssertionError("details fetched for an unambiguous exact match")
+
+    monkeypatch.setattr(banana_details, "_get_food_item_details", details_must_not_run)
+    result = food_logging.log_by_query(
+        banana_details, store, "Banana", TODAY, "breakfast", 1.0
+    )
+    assert result["source"] == "exact_match"
+    assert result["serving"] == "1 medium"
+    searches = [url for _, url, _ in banana_details.session.calls if "search" in url]
+    assert len(searches) == 1
+
+
+def test_pin_and_exact_paths_report_one_shape(banana_details, store):
+    exact = food_logging.log_by_query(
+        banana_details, store, "banana", TODAY, "breakfast", 1.0
+    )
+    store.set_pin("banana", "111", "20", "Banana", "1 large")
+    pinned = food_logging.log_by_query(
+        banana_details, store, "banana", TODAY, "breakfast", 1.0
+    )
+    assert set(exact) == set(pinned)
+
+
 def test_bare_ambiguous_query_returns_draft_and_logs_nothing(banana_details, store):
     result = food_logging.log_by_query(
         banana_details, store, "bread", TODAY, "breakfast", 1.0

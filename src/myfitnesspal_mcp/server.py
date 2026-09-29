@@ -225,27 +225,19 @@ async def fitness_log_food(
                 pin=pin,
             )
         elif food_id is not None and weight_id is not None:
-            day = explicit_day or parse_day(None)
-            chosen_meal = meal or "breakfast"
-            chosen_quantity = 1.0 if quantity is None else quantity
-            logged = diary.push_food(
-                client,
-                day,
-                chosen_meal,
-                query or food_id,
-                chosen_quantity,
-                food_id=food_id,
-                weight_id=weight_id,
-            )
-            result = {
-                "logged": logged["matched"],
+            food = {
                 "food_id": food_id,
                 "weight_id": weight_id,
-                "quantity": chosen_quantity,
-                "meal": chosen_meal,
-                "date": day.isoformat(),
-                "source": "ids",
+                "name": query or food_id,
             }
+            logged = food_logging.log_exact(
+                client,
+                food,
+                explicit_day or parse_day(None),
+                meal or "breakfast",
+                1.0 if quantity is None else quantity,
+            )
+            result = {**logged, "source": "ids"}
         elif query:
             result = food_logging.log_by_query(
                 client,

@@ -11,7 +11,7 @@ from dataclasses import asdict
 from datetime import date
 
 from . import diary
-from .food_ranking import MacroTargets, rank_candidates
+from .food_ranking import MacroTargets, normalize_query, rank_candidates
 
 
 class DraftNotFound(RuntimeError):
@@ -95,10 +95,11 @@ def _build_draft(
     quantity: float,
     targets: MacroTargets,
     limit: int,
+    search_results: list[dict] | None = None,
 ) -> tuple[str, dict]:
     targets.validate()
     pin = store.pin(query)
-    candidates = diary.food_candidates(client, query, limit)
+    candidates = diary.food_candidates(client, query, limit, search_results)
     if pin:
         _include_pin(candidates, pin)
     if not candidates:
@@ -155,28 +156,55 @@ def _chosen_serving(option: dict, serving: int | None) -> tuple[str, str | None]
     return servings[index]["weight_id"], servings[index]["label"]
 
 
-def _log_option(
-    client, option: dict, serving: int | None, day: date, meal: str, quantity: float
+def log_exact(
+    client,
+    food: dict,
+    day: date,
+    meal: str,
+    quantity: float,
+    page: tuple | None = None,
 ) -> dict:
-    weight_id, label = _chosen_serving(option, serving)
+    """Logs `food` ({food_id, weight_id, name, serving}) as-is. Every logging
+    path ends here, so they all report the same result shape. `page` is an
+    already-fetched diary page for `day`."""
     diary.push_food(
         client,
         day,
         meal,
-        option["name"],
+        food["name"],
         quantity,
-        food_id=option["food_id"],
-        weight_id=weight_id,
+        food_id=food["food_id"],
+        weight_id=food["weight_id"],
+        page=page,
     )
     return {
-        "logged": option["name"],
-        "food_id": option["food_id"],
-        "weight_id": weight_id,
-        "serving": label,
+        "logged": food["name"],
+        "food_id": food["food_id"],
+        "weight_id": food["weight_id"],
+        "serving": food.get("serving"),
         "quantity": quantity,
         "meal": meal,
         "date": day.isoformat(),
     }
+
+
+def _log_option(
+    client,
+    option: dict,
+    serving: int | None,
+    day: date,
+    meal: str,
+    quantity: float,
+    page: tuple | None = None,
+) -> dict:
+    weight_id, label = _chosen_serving(option, serving)
+    food = {
+        "food_id": option["food_id"],
+        "weight_id": weight_id,
+        "name": option["name"],
+        "serving": label,
+    }
+    return log_exact(client, food, day, meal, quantity, page)
 
 
 def log_from_draft(
@@ -189,6 +217,7 @@ def log_from_draft(
     meal: str | None = None,
     day: date | None = None,
     pin: bool = True,
+    page: tuple | None = None,
 ) -> dict:
     body = store.draft(draft_id)
     if body is None:
@@ -207,6 +236,7 @@ def log_from_draft(
         day or date.fromisoformat(body["day"]),
         meal or body["meal"],
         body["quantity"] if quantity is None else quantity,
+        page,
     )
     if pin:
         store.set_pin(
@@ -219,38 +249,64 @@ def log_from_draft(
     return {**result, "source": "draft", "pinned": pin}
 
 
+BARE_QUERY_LIMIT = 10
+
+
+def _unambiguous_food(
+    client, store, query: str
+) -> tuple[dict | None, list[dict] | None]:
+    """(food, search_results). `food` is set only when the choice needs no
+    asking: a pin (no search at all) or exactly one exact-name match on the
+    search page (no details calls). Otherwise the search results come back
+    so a draft can be built without searching again."""
+    pin = store.pin(query)
+    if pin:
+        food = {
+            "food_id": pin["food_id"],
+            "weight_id": pin["weight_id"],
+            "name": pin["name"] or query,
+            "serving": pin["serving"],
+            "source": "pin",
+        }
+        return food, None
+    search_results, _ = diary.food_search(client, query)
+    wanted_name = normalize_query(query)
+    exact_by_food_id = {}
+    for result in search_results[:BARE_QUERY_LIMIT]:
+        if normalize_query(result["name"]) == wanted_name:
+            exact_by_food_id.setdefault(result["food_id"], result)
+    if len(exact_by_food_id) != 1:
+        return None, search_results
+    match = next(iter(exact_by_food_id.values()))
+    food = {
+        "food_id": match["food_id"],
+        "weight_id": match["weight_id"],
+        "name": match["name"],
+        "serving": match["serving"],
+        "source": "exact_match",
+    }
+    return food, search_results
+
+
 def log_by_query(
     client, store, query: str, day: date, meal: str, quantity: float
 ) -> dict:
     """Logs without asking only when the choice is already unambiguous: a
-    pinned food (no search at all) or exactly one exact-name match. Anything
-    else returns a draft to choose from and logs nothing."""
-    pin = store.pin(query)
-    if pin:
-        diary.push_food(
-            client,
-            day,
-            meal,
-            pin["name"] or query,
-            quantity,
-            food_id=pin["food_id"],
-            weight_id=pin["weight_id"],
-        )
-        return {
-            "logged": pin["name"] or query,
-            "food_id": pin["food_id"],
-            "weight_id": pin["weight_id"],
-            "serving": pin["serving"],
-            "quantity": quantity,
-            "meal": meal,
-            "date": day.isoformat(),
-            "source": "pin",
-        }
+    pinned food or exactly one exact-name match. Anything else returns a
+    draft to choose from and logs nothing."""
+    food, search_results = _unambiguous_food(client, store, query)
+    if food:
+        result = log_exact(client, food, day, meal, quantity)
+        return {**result, "source": food["source"]}
     draft_id, body = _build_draft(
-        client, store, query, day, meal, quantity, MacroTargets(), limit=10
+        client,
+        store,
+        query,
+        day,
+        meal,
+        quantity,
+        MacroTargets(),
+        BARE_QUERY_LIMIT,
+        search_results,
     )
-    exact = [option for option in body["options"] if option["exact_match"]]
-    if len(exact) == 1:
-        result = _log_option(client, exact[0], None, day, meal, quantity)
-        return {**result, "source": "exact_match"}
     return {"logged": None, "needs_choice": True, **_draft_view(draft_id, body)}
