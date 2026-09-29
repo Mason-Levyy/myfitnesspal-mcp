@@ -15,11 +15,9 @@
 
 [Quickstart](#quickstart) · [Tools](#tools) · [Authentication](#authentication) · [Changelog](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/CHANGELOG.md)
 
-<img alt="Demo: logging a banana takes 14 taps in the app and 2 with myfitnesspal-mcp" src="https://raw.githubusercontent.com/Mason-Levyy/myfitnesspal-mcp/main/assets/demo.gif" width="720">
-
-<sub>▶ [Watch with sound (MP4)](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/assets/demo.mp4)</sub>
-
 </div>
+
+https://github.com/user-attachments/assets/8eeb8516-00ee-42f3-9999-ef77059dddb2
 
 Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
 the food database with macros, track trends, and export your nutrition history, all against your real MyFitnessPal diary.
