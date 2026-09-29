@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
 ### Added
 
 - `fitness_get_exercise_entries` lists a day's cardio and strength entries
@@ -127,7 +129,8 @@ All notable changes to this project are documented here. The format follows
   auto-refresh, stdio and streamable HTTP transports. Published to PyPI as
   `mfp-mcp`.
 
-[Unreleased]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.1.3...v0.2.0
