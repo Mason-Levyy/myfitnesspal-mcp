@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import contextmanager
 from datetime import date, timedelta
 
@@ -7,6 +8,8 @@ from .mfp_client import is_auth_error
 from .store import Store
 
 logger = logging.getLogger(__name__)
+
+_poll_lock = threading.Lock()
 
 
 @contextmanager
@@ -90,7 +93,13 @@ def poll(
     today = today or date.today()
     if not force and store.last_synced_on() == today.isoformat():
         return
+    with _poll_lock:
+        if not force and store.last_synced_on() == today.isoformat():
+            return
+        _poll_window(store, client, days, today)
 
+
+def _poll_window(store: Store, client, days: int | None, today: date) -> None:
     lookback = days or config.sync_days()
     window_start = today - timedelta(days=lookback - 1)
     cached = store.days_with_synced_diary(
