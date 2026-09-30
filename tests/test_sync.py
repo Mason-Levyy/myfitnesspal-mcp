@@ -127,8 +127,6 @@ def test_poll_skips_when_synced_today(store, monkeypatch):
 
 
 def test_concurrent_polls_fetch_once(store):
-    """Parallel tool calls on a fresh day both see an unsynced cache; the
-    second must wait for the first poll rather than refetch the window."""
     today_fetch_started = threading.Event()
     let_fetch_finish = threading.Event()
 

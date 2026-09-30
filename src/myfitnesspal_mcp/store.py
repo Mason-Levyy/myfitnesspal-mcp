@@ -104,11 +104,6 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
 
 
 def _serialized(method):
-    """Tool calls run in parallel worker threads over one shared connection,
-    and a connection sees its own uncommitted writes. Without this, a read
-    could observe replace_diary between its DELETE and INSERT (an empty day),
-    and another thread's commit could land mid-write."""
-
     @functools.wraps(method)
     def locked(self, *args, **kwargs):
         with self._lock:

@@ -7,8 +7,6 @@ import pytest
 
 
 def test_reads_never_see_a_half_replaced_diary():
-    """A tool reading the day while a sync rewrites it shares the connection,
-    so it must not observe the gap between replace_diary's DELETE and INSERT."""
     from myfitnesspal_mcp.store import Store
 
     store = Store(Path(":memory:"))

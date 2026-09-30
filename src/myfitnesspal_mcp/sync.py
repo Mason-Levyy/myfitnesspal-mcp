@@ -90,9 +90,6 @@ def poll(
     force: bool = False,
     today: date | None = None,
 ) -> None:
-    """Gap-fills the cache from MyFitnessPal, at most once per day unless
-    forced. Parallel tool calls on a fresh day queue behind the first poll and
-    then find it already done, instead of each refetching the whole window."""
     today = today or date.today()
     if not force and store.last_synced_on() == today.isoformat():
         return
