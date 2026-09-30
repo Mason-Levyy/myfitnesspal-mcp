@@ -115,8 +115,6 @@ def auto_refresh_status() -> tuple[bool, str]:
 
 
 def run_check() -> int:
-    """Reports whether the saved session still authenticates and whether
-    automatic refresh is set up, without prompting or saving anything."""
     from . import mfp_client
 
     source = session_source()
