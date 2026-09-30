@@ -1,6 +1,8 @@
+import functools
 import json
 import secrets
 import sqlite3
+import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -101,10 +103,20 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
     return dict(row)
 
 
+def _serialized(method):
+    @functools.wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return locked
+
+
 class Store:
     def __init__(self, path: Path | None = None):
         if path is None:
             path = config.database_path()
+        self._lock = threading.RLock()
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
@@ -130,6 +142,7 @@ class Store:
             )
             self.conn.commit()
 
+    @_serialized
     def upsert_nutrition(self, day: str, **fields) -> None:
         unknown = set(fields) - set(NUTRITION_FIELDS)
         if unknown:
@@ -144,6 +157,7 @@ class Store:
         )
         self.conn.commit()
 
+    @_serialized
     def mark_diary_synced(self, day: str) -> None:
         """Record that the day's MyFitnessPal diary has been fetched in full.
 
@@ -158,6 +172,7 @@ class Store:
         )
         self.conn.commit()
 
+    @_serialized
     def nutrition(self, day: str) -> dict | None:
         row = self.conn.execute(
             "SELECT day, calories, protein, carbs, fat, water_ml, weight, "
@@ -166,6 +181,7 @@ class Store:
         ).fetchone()
         return _row_to_dict(row)
 
+    @_serialized
     def replace_diary(self, day: str, entries: list[dict]) -> None:
         self.conn.execute("DELETE FROM diary_entry WHERE day = ?", (day,))
         self.conn.executemany(
@@ -186,6 +202,7 @@ class Store:
         )
         self.conn.commit()
 
+    @_serialized
     def diary(self, day: str) -> list[dict]:
         rows = self.conn.execute(
             "SELECT meal, name, calories, protein, carbs, fat FROM diary_entry "
@@ -194,6 +211,7 @@ class Store:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_serialized
     def set_feel(self, day: str, note: str | None, rating: int | None) -> dict:
         self.conn.execute(
             "INSERT INTO feel_note (day, note, rating) VALUES (?, ?, ?) "
@@ -203,12 +221,14 @@ class Store:
         self.conn.commit()
         return {"day": day, "note": note, "rating": rating}
 
+    @_serialized
     def feel(self, day: str) -> dict | None:
         row = self.conn.execute(
             "SELECT day, note, rating FROM feel_note WHERE day = ?", (day,)
         ).fetchone()
         return _row_to_dict(row)
 
+    @_serialized
     def set_note(self, day: str, body: str | None) -> None:
         """The MyFitnessPal daily diary note (synced from/to MFP), distinct from
         the local-only feel note."""
@@ -219,6 +239,7 @@ class Store:
         )
         self.conn.commit()
 
+    @_serialized
     def note(self, day: str) -> str | None:
         row = self.conn.execute(
             "SELECT body FROM day_note WHERE day = ?", (day,)
@@ -227,6 +248,7 @@ class Store:
             return None
         return row["body"]
 
+    @_serialized
     def days_with_synced_diary(self, start: str, end: str) -> set[str]:
         rows = self.conn.execute(
             "SELECT day FROM day_nutrition "
@@ -235,6 +257,7 @@ class Store:
         ).fetchall()
         return {r["day"] for r in rows}
 
+    @_serialized
     def trend(self, metric: str, start: str, end: str) -> list[dict]:
         rows = self.conn.execute(
             f"SELECT day, {trend_column(metric)} AS value FROM day_nutrition "
@@ -243,6 +266,7 @@ class Store:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_serialized
     def day_record(self, day: str) -> dict:
         return {
             "day": day,
@@ -252,12 +276,14 @@ class Store:
             "feel": self.feel(day),
         }
 
+    @_serialized
     def export_range(self, start: str, end: str) -> list[dict]:
         days: set[str] = set()
         for query in POPULATED_DAY_QUERIES:
             days |= {row["day"] for row in self.conn.execute(query, (start, end))}
         return [self.day_record(day) for day in sorted(days)]
 
+    @_serialized
     def last_synced_on(self) -> str | None:
         row = self.conn.execute(
             "SELECT value FROM meta WHERE key = 'last_synced_on'"
@@ -266,6 +292,7 @@ class Store:
             return None
         return row["value"]
 
+    @_serialized
     def mark_synced(self, day: date | None = None) -> None:
         self.conn.execute(
             "INSERT INTO meta (key, value) VALUES ('last_synced_on', ?) "
@@ -274,6 +301,7 @@ class Store:
         )
         self.conn.commit()
 
+    @_serialized
     def set_pin(
         self,
         query: str,
@@ -302,6 +330,7 @@ class Store:
         self.conn.commit()
         return pin
 
+    @_serialized
     def pin(self, query: str) -> dict | None:
         row = self.conn.execute(
             "SELECT query, food_id, weight_id, name, serving, updated_at "
@@ -310,6 +339,7 @@ class Store:
         ).fetchone()
         return _row_to_dict(row)
 
+    @_serialized
     def pins(self) -> list[dict]:
         rows = self.conn.execute(
             "SELECT query, food_id, weight_id, name, serving, updated_at "
@@ -317,6 +347,7 @@ class Store:
         ).fetchall()
         return [dict(pin_row) for pin_row in rows]
 
+    @_serialized
     def clear_pin(self, query: str) -> bool:
         cursor = self.conn.execute(
             "DELETE FROM food_pin WHERE query = ?", (normalize_query(query),)
@@ -324,11 +355,13 @@ class Store:
         self.conn.commit()
         return cursor.rowcount > 0
 
+    @_serialized
     def clear_pins(self) -> int:
         cursor = self.conn.execute("DELETE FROM food_pin")
         self.conn.commit()
         return cursor.rowcount
 
+    @_serialized
     def save_draft(self, body: dict, now: datetime | None = None) -> str:
         created_at = now or _utc_now()
         self.conn.execute(
@@ -343,6 +376,7 @@ class Store:
         self.conn.commit()
         return draft_id
 
+    @_serialized
     def draft(self, draft_id: str, now: datetime | None = None) -> dict | None:
         row = self.conn.execute(
             "SELECT created_at, body FROM food_draft WHERE draft_id = ?",
