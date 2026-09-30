@@ -155,11 +155,17 @@ def test_push_food_never_searches(client):
     assert not any("food/search" in url for _, url, _ in client.session.calls)
 
 
+def test_diary_page_requests_username_less_url(client):
+    diary.diary_page(client, TODAY)
+    _, url, _ = client.session.calls[-1]
+    assert url == "https://www.myfitnesspal.com/food/diary?date=2026-07-08"
+
+
 def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     diary.push_food(client, TODAY, "Snacks/Misc", "111", "10")
     method, url, kwargs = client.session.calls[-1]
@@ -172,7 +178,7 @@ def test_push_food_resolves_sixth_custom_meal_case_insensitively(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     diary.push_food(client, TODAY, "supplements/sauces/spreads", "111", "10")
     _, _, kwargs = client.session.calls[-1]
@@ -183,7 +189,7 @@ def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
         diary.push_food(client, TODAY, "brunch", "111", "10")
@@ -194,7 +200,7 @@ def test_push_food_default_keyword_reaches_renamed_first_meal(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     diary.push_food(client, TODAY, "breakfast", "111", "10")
     _, _, kwargs = client.session.calls[-1]
@@ -229,7 +235,7 @@ def test_delete_food_default_keyword_filters_renamed_meal(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     result = diary.delete_food(client, TODAY, "banana", "breakfast")
     assert result == {
@@ -244,7 +250,7 @@ def test_delete_food_unknown_meal_raises_before_removing(
     client, custom_meals_diary_html, make_response
 ):
     client.session.route(
-        "GET", "food/diary/tester", make_response(text=custom_meals_diary_html)
+        "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal):
         diary.delete_food(client, TODAY, "banana", "brunch")
@@ -319,7 +325,7 @@ def test_meal_matching_collapses_whitespace_and_nbsp():
 def test_diary_page_without_meal_sections_is_an_auth_error(client, make_response):
     client.session.route(
         "GET",
-        "food/diary/tester",
+        "food/diary?date=",
         make_response(
             text="<html><head><meta name='csrf-token' content='T'></head>"
             "<body><form id='login'></form></body></html>"
@@ -543,7 +549,7 @@ def test_log_water_adds_to_existing_total(water_client):
     assert kwargs["data"] == {"milliliters": 1200.0, "date": "2026-07-08"}
     assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
     assert kwargs["headers"]["Origin"] == "https://www.myfitnesspal.com"
-    assert kwargs["headers"]["Referer"].endswith("food/diary/tester")
+    assert kwargs["headers"]["Referer"] == "https://www.myfitnesspal.com/food/diary"
 
 
 def test_log_water_replace_sets_total(water_client):
