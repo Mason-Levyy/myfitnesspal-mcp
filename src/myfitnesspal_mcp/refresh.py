@@ -69,12 +69,7 @@ _completed_refreshes = 0
 
 def refresh_session() -> None:
     """Rotate the session by revisiting MFP in the seeded headless browser
-    profile, then persist the fresh cookies and drop the cached client.
-
-    Parallel tool calls that hit the same expired session each land here, but
-    Chromium locks its profile directory, so only one browser may run. Callers
-    that waited while another refresh ran reuse its result instead of
-    launching again."""
+    profile, then persist the fresh cookies and drop the cached client."""
     global _completed_refreshes
     refreshes_seen = _completed_refreshes
     with _refresh_lock:

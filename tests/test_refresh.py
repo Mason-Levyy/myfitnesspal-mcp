@@ -8,8 +8,6 @@ WAIT_SECONDS = 5
 
 
 class ObservedLock:
-    """A lock that signals each time a caller starts waiting to acquire it."""
-
     def __init__(self):
         self._lock = threading.Lock()
         self.acquire_attempts = 0
@@ -72,8 +70,6 @@ def test_concurrent_refreshes_launch_one_browser(seeded_browser, monkeypatch):
 
 
 def test_later_refresh_runs_again(seeded_browser, monkeypatch):
-    """A refresh requested after the previous one finished reflects a new
-    failure, so it must launch the browser rather than reuse the old result."""
     browser_launches = []
 
     def harvest(seed):
