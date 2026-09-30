@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
   headless-browser refresh runs and the others reuse it. Previously each call
   launched Chromium against the same profile, and every launch after the
   first failed.
+- Food diary reads and writes, and cache syncs, use `/food/diary?date=`
+  instead of `/food/diary/{username}?date=`. Since 2026-09-30 MyFitnessPal
+  answers the username form with its marketing homepage, which made every
+  diary write fail as signed out and let syncs cache days as empty (#24).
 
 ## [0.4.0] - 2026-09-28
 

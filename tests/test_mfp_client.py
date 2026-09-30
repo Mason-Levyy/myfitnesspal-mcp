@@ -1,3 +1,5 @@
+import datetime
+
 from myfitnesspal_mcp import mfp_client
 
 
@@ -30,6 +32,18 @@ def test_username_override_used_when_profile_fails(monkeypatch):
     fake = FakeClient(None, username="injected-name", impersonate="chrome124")
     assert fake._get_user_metadata() == {"username": "injected-name"}
     assert captured["impersonate"] == "chrome124"
+
+
+def test_own_diary_date_url_drops_username():
+    client = object.__new__(mfp_client.CurlCffiClient)
+    url = client._get_url_for_date(datetime.date(2026, 9, 29), "tester")
+    assert url == "https://www.myfitnesspal.com/food/diary?date=2026-09-29"
+
+
+def test_friend_diary_date_url_keeps_friend_username():
+    client = object.__new__(mfp_client.CurlCffiClient)
+    url = client._get_url_for_date(datetime.date(2026, 9, 29), "tester", "buddy")
+    assert url == "https://www.myfitnesspal.com/food/diary/buddy?date=2026-09-29"
 
 
 def test_is_auth_error_matches_expired_language():
