@@ -96,6 +96,7 @@ def rank_candidates(
     query: str,
     quantity: float = 1.0,
     targets: MacroTargets | None = None,
+    *,
     pinned_food_id: str | None = None,
     pinned_weight_id: str | None = None,
 ) -> list[dict]:

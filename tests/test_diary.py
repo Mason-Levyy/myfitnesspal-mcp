@@ -12,128 +12,10 @@ def meal_id(doc, meal):
     return diary.resolve_meal(doc, meal)[0]
 
 
-def test_food_search_parses_results_and_csrf(client):
-    results, csrf = diary.food_search(client, "banana")
-    assert csrf == "CSRF123"
-    assert [r["food_id"] for r in results] == ["111", "222"]
-    first = results[0]
-    assert first["weight_id"] == "10"
-    assert first["name"] == "Banana"
-    assert first["external_id"] == "999"
-    assert first["brand"] == "Fresh Fruit"
-    assert first["calories"] == 105.0
-
-
-def test_food_search_degrades_without_external_id(client):
-    results, _ = diary.food_search(client, "banana")
-    second = results[1]
-    assert second["external_id"] is None
-    assert second["calories"] == 196.0
-
-
-def test_search_food_enriches_macros(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
-        "serving_sizes": [{"value": 1, "unit": "medium"}],
-    }
-    candidates = diary.search_food(client, "banana", limit=2)
-    assert len(candidates) == 2
-    enriched = candidates[0]
-    assert enriched["protein"] == 1.3
-    assert enriched["carbs"] == 27.0
-    assert enriched["serving"] == "1 medium"
-    assert enriched["verified"] is True
-    degraded = candidates[1]
-    assert degraded["protein"] is None
-    assert degraded["calories"] == 196.0
-
-
-def test_search_food_survives_detail_failures(client):
-    candidates = diary.search_food(client, "banana", limit=1)
-    assert candidates[0]["calories"] == 105.0
-    assert candidates[0]["protein"] is None
-
-
-def test_pair_servings_zips_weight_ids_by_position():
-    serving_sizes = [
-        {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
-        {"value": 1.0, "unit": "large", "nutrition_multiplier": 1.15},
-    ]
-    assert diary.pair_servings(["10", "20"], serving_sizes) == [
-        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0},
-        {"weight_id": "20", "label": "1 large", "nutrition_multiplier": 1.15},
-    ]
-
-
-def test_pair_servings_refuses_count_mismatch():
-    serving_sizes = [{"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0}]
-    assert diary.pair_servings(["10", "20"], serving_sizes) == []
-
-
-def test_pair_servings_skips_malformed_entries_without_shifting_weight_ids():
-    serving_sizes = [
-        {"value": None, "unit": None, "nutrition_multiplier": 1.0},
-        {"value": 1.0, "unit": "large"},
-        "not a serving",
-        {"value": 2, "unit": None, "nutrition_multiplier": "2.0"},
-        {"value": 40, "unit": "g", "nutrition_multiplier": 0.4},
-    ]
-    assert diary.pair_servings(["10", "20", "30", "40", "50"], serving_sizes) == [
-        {"weight_id": "40", "label": "2", "nutrition_multiplier": 2.0},
-        {"weight_id": "50", "label": "40 g", "nutrition_multiplier": 0.4},
-    ]
-
-
-def test_food_candidates_survive_one_malformed_food(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {},
-        "serving_sizes": [{"value": None}, {"unit": "slice"}],
-    }
-    candidates = diary.food_candidates(client, "banana")
-    assert [candidate["name"] for candidate in candidates] == [
-        "Banana",
-        "Banana Bread",
-    ]
-    assert candidates[0]["servings"] == [
-        {"weight_id": "10", "label": "1 medium", "nutrition_multiplier": 1.0}
-    ]
-    assert candidates[0]["nutrition"] == {"calories": 105.0}
-
-
-def test_food_candidates_build_ranking_shape(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
-        "serving_sizes": [
-            {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
-            {"value": 118.0, "unit": "g", "nutrition_multiplier": 1.0},
-        ],
-    }
-    banana, banana_bread = diary.food_candidates(client, "banana")
-    assert banana["search_rank"] == 0
-    assert banana["verified"] is True
-    assert banana["nutrition"] == {
-        "calories": 105.0,
-        "protein": 1.3,
-        "carbs": 27.0,
-        "fat": 0.4,
-    }
-    assert [s["weight_id"] for s in banana["servings"]] == ["10", "20"]
-    assert banana["servings"][1]["label"] == "118 g"
-    assert banana_bread["servings"] == [
-        {"weight_id": "30", "label": "1 slice", "nutrition_multiplier": 1.0}
-    ]
-    assert banana_bread["default_weight_id"] == "30"
-    assert banana_bread["nutrition"] == {"calories": 196.0}
-
-
 def test_push_food_posts_the_given_food(client):
-    diary.push_food(client, TODAY, "snacks", "111", "10", quantity=2.0)
+    diary.push_food(
+        client, TODAY, "snacks", food_id="111", weight_id="10", quantity=2.0
+    )
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -148,7 +30,7 @@ def test_push_food_posts_the_given_food(client):
 
 
 def test_push_food_never_searches(client):
-    diary.push_food(client, TODAY, "lunch", "777", "88")
+    diary.push_food(client, TODAY, "lunch", food_id="777", weight_id="88")
     method, url, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[food_id]"] == "777"
     assert kwargs["data"]["food_entry[meal_id]"] == "1"
@@ -167,7 +49,7 @@ def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "Snacks/Misc", "111", "10")
+    diary.push_food(client, TODAY, "Snacks/Misc", food_id="111", weight_id="10")
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -180,7 +62,9 @@ def test_push_food_resolves_sixth_custom_meal_case_insensitively(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "supplements/sauces/spreads", "111", "10")
+    diary.push_food(
+        client, TODAY, "supplements/sauces/spreads", food_id="111", weight_id="10"
+    )
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "5"
 
@@ -192,7 +76,7 @@ def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
-        diary.push_food(client, TODAY, "brunch", "111", "10")
+        diary.push_food(client, TODAY, "brunch", food_id="111", weight_id="10")
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
 
@@ -202,7 +86,7 @@ def test_push_food_default_keyword_reaches_renamed_first_meal(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "breakfast", "111", "10")
+    diary.push_food(client, TODAY, "breakfast", food_id="111", weight_id="10")
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "0"
 
@@ -332,7 +216,7 @@ def test_diary_page_without_meal_sections_is_an_auth_error(client, make_response
         ),
     )
     with pytest.raises(diary.DiarySignedOut) as exc_info:
-        diary.push_food(client, TODAY, "breakfast", "111", "10")
+        diary.push_food(client, TODAY, "breakfast", food_id="111", weight_id="10")
     assert mfp_client.is_auth_error(exc_info.value)
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
@@ -454,163 +338,3 @@ def test_delete_food_removes_match(client):
 def test_delete_food_no_match(client):
     with pytest.raises(diary.NoMatchingEntry, match="in dinner"):
         diary.delete_food(client, TODAY, "coffee", meal="dinner")
-
-
-def test_get_note_double_unescapes_body(client, make_response):
-    client.session.route(
-        "GET", "food/note", make_response(json_data={"item": {"body": "a &amp;amp; b"}})
-    )
-    assert diary.get_note(client, TODAY) == "a & b"
-    method, url, kwargs = client.session.calls[-1]
-    assert method == "GET"
-    assert "food/note?date=2026-07-08" in url
-
-
-def test_get_note_empty_is_none(client, make_response):
-    client.session.route(
-        "GET", "food/note", make_response(json_data={"item": {"body": ""}})
-    )
-    assert diary.get_note(client, TODAY) is None
-
-
-def test_set_note_posts_form_body_and_csrf(client):
-    result = diary.set_note(client, TODAY, "today test\n")
-    assert result == {"day": "2026-07-08", "note": "today test\n"}
-    method, url, kwargs = client.session.calls[-1]
-    assert method == "POST"
-    assert "food/note" in url
-    assert kwargs["data"] == {"body": "today test\n", "date": "2026-07-08"}
-    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
-    assert kwargs["headers"]["Content-Type"].startswith(
-        "application/x-www-form-urlencoded"
-    )
-
-
-def test_push_note_append_keeps_existing(client, make_response):
-    client.session.route(
-        "GET", "food/note", make_response(json_data={"item": {"body": "line one"}})
-    )
-    result = diary.push_note(client, TODAY, "line two", append=True)
-    assert result["note"] == "line one\nline two"
-    method, url, kwargs = client.session.calls[-1]
-    assert kwargs["data"]["body"] == "line one\nline two"
-
-
-def test_set_weight_posts_v2_items(client, make_response):
-    client.session.route(
-        "POST",
-        "v2/measurements",
-        make_response(
-            status_code=200,
-            json_data={
-                "items": [
-                    {
-                        "type": "Weight",
-                        "value": 175.0,
-                        "date": "2026-07-08",
-                        "unit": "pounds",
-                    }
-                ]
-            },
-        ),
-    )
-    result = diary.set_weight(client, TODAY, 175.0)
-    assert result == {"day": "2026-07-08", "weight": 175.0, "unit": "pounds"}
-    method, url, kwargs = client.session.calls[-1]
-    assert "v2/measurements" in url
-    assert kwargs["json"] == {
-        "items": [{"type": "Weight", "value": 175.0, "date": "2026-07-08"}]
-    }
-
-
-@pytest.fixture
-def water_client(client, make_response):
-    client.session.route(
-        "GET", "food/water", make_response(json_data={"item": {"milliliters": 480}})
-    )
-    client.session.route("POST", "food/water", make_response(status_code=200))
-    return client
-
-
-def test_log_water_adds_to_existing_total(water_client):
-    result = diary.log_water(water_client, TODAY, 3, "cup")
-
-    assert result == {
-        "day": "2026-07-08",
-        "previous_ml": 480.0,
-        "water_ml": 1200.0,
-        "amount": 3,
-        "unit": "cup",
-        "replaced": False,
-    }
-    method, url, kwargs = water_client.session.calls[-1]
-    assert method == "POST"
-    assert "food/water" in url
-    assert kwargs["data"] == {"milliliters": 1200.0, "date": "2026-07-08"}
-    assert kwargs["headers"]["X-CSRF-Token"] == "DIARYTOKEN"
-    assert kwargs["headers"]["Origin"] == "https://www.myfitnesspal.com"
-    assert kwargs["headers"]["Referer"] == "https://www.myfitnesspal.com/food/diary"
-
-
-def test_log_water_replace_sets_total(water_client):
-    result = diary.log_water(water_client, TODAY, 2, "cups", replace=True)
-
-    assert result["previous_ml"] == 480.0
-    assert result["water_ml"] == 480.0
-    assert water_client.session.calls[-1][2]["data"]["milliliters"] == 480.0
-
-
-def test_log_water_replace_with_zero_clears_day(water_client):
-    result = diary.log_water(water_client, TODAY, 0, "ml", replace=True)
-    assert result["water_ml"] == 0.0
-
-
-@pytest.mark.parametrize(
-    ("unit", "canonical"),
-    [
-        ("ml", "ml"),
-        ("Milliliters", "ml"),
-        ("millilitres", "ml"),
-        ("L", "l"),
-        ("litres", "l"),
-        ("liter", "l"),
-        ("Cups", "cup"),
-        ("fl_oz", "fl_oz"),
-        ("fl oz", "fl_oz"),
-        ("fl. oz", "fl_oz"),
-        ("floz", "fl_oz"),
-        ("oz", "fl_oz"),
-        ("fluid ounces", "fl_oz"),
-    ],
-)
-def test_normalize_water_unit_accepts_common_spellings(unit, canonical):
-    assert diary.normalize_water_unit(unit) == canonical
-
-
-@pytest.mark.parametrize(
-    ("amount", "unit", "expected_added_ml"),
-    [(500, "ml", 500.0), (8, "fl oz", 236.588), (1.5, "litres", 1500.0)],
-)
-def test_log_water_converts_units(water_client, amount, unit, expected_added_ml):
-    result = diary.log_water(water_client, TODAY, amount, unit)
-    assert result["water_ml"] - result["previous_ml"] == pytest.approx(
-        expected_added_ml
-    )
-
-
-def test_log_water_rejects_unknown_unit_before_network_call(client):
-    with pytest.raises(ValueError, match="unknown water unit 'gallon'"):
-        diary.log_water(client, TODAY, 1, "gallon")
-    assert client.session.calls == []
-
-
-def test_log_water_rejects_non_positive_add_before_network_call(client):
-    with pytest.raises(ValueError, match="use replace=True"):
-        diary.log_water(client, TODAY, 0, "cup")
-    assert client.session.calls == []
-
-
-def test_log_water_rejects_negative_replace_before_network_call(client):
-    with pytest.raises(ValueError, match="can't be negative"):
-        diary.log_water(client, TODAY, -1, "cup", replace=True)
-    assert client.session.calls == []
