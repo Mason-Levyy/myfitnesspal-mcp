@@ -97,7 +97,7 @@ def custom_meals_diary_html():
 def client(search_html, diary_html):
     fake = FakeClient()
     fake.session.route("GET", "food/search", FakeResponse(text=search_html))
-    fake.session.route("GET", "food/diary/tester", FakeResponse(text=diary_html))
+    fake.session.route("GET", "food/diary?date=", FakeResponse(text=diary_html))
     fake.session.route("POST", "food/add", FakeResponse(status_code=204))
     fake.session.route("POST", "food/remove", FakeResponse(status_code=200))
     fake.session.route(

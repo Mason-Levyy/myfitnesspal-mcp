@@ -304,12 +304,15 @@ def push_food(
     add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
 
 
+def food_diary_url(client, day: date | None = None) -> str:
+    url = parse.urljoin(client.BASE_URL_SECURE, "food/diary")
+    if day is None:
+        return url
+    return f"{url}?date={day.isoformat()}"
+
+
 def diary_page(client, day: date):
-    url = parse.urljoin(
-        client.BASE_URL_SECURE,
-        f"food/diary/{client.effective_username}?date={day.isoformat()}",
-    )
-    resp = client.session.get(url, headers=api_headers(client))
+    resp = client.session.get(food_diary_url(client, day), headers=api_headers(client))
     resp.raise_for_status()
     doc = lh.fromstring(resp.text)
     tokens = doc.xpath("//meta[@name='csrf-token']/@content")
@@ -363,9 +366,7 @@ def remove_entry(client, entry_id: str, token: str) -> None:
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
             "Origin": "https://www.myfitnesspal.com",
-            "Referer": parse.urljoin(
-                client.BASE_URL_SECURE, f"food/diary/{client.effective_username}"
-            ),
+            "Referer": food_diary_url(client),
         },
     )
     if resp.status_code not in (200, 204):
@@ -518,9 +519,7 @@ def log_water(
             {
                 "X-CSRF-Token": csrf,
                 "Origin": "https://www.myfitnesspal.com",
-                "Referer": parse.urljoin(
-                    client.BASE_URL_SECURE, f"food/diary/{client.effective_username}"
-                ),
+                "Referer": food_diary_url(client),
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             },
         ),
@@ -568,9 +567,7 @@ def set_note(client, day: date, body: str) -> dict:
                 "Accept": "*/*",
                 "X-CSRF-Token": csrf,
                 "Origin": "https://www.myfitnesspal.com",
-                "Referer": parse.urljoin(
-                    client.BASE_URL_SECURE, f"food/diary/{client.effective_username}"
-                ),
+                "Referer": food_diary_url(client),
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             },
         ),
