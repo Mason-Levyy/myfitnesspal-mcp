@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `auth --check` reports where the session comes from, whether MyFitnessPal
+  still accepts it, and whether auto-refresh is ready. It never prompts or
+  saves, and exits 1 when the session needs attention.
+
 ### Fixed
 
 - When several tool calls hit an expired session at once, only one
