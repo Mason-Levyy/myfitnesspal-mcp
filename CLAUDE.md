@@ -69,7 +69,9 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   pattern.
 - **Tool docstrings are the descriptions clients show the model.** They are
   product surface, not comments. When behavior changes, update the argument
-  formats, defaults, and cross-tool guidance in them to match.
+  formats, defaults, and cross-tool guidance in them to match. Rewording them
+  changes how every user's model calls the tools, so treat that as a
+  user-facing change too (see below).
 - **MFP writes are not idempotent.** `/food/add` adds a duplicate every time,
   and `/food/water` sets the whole day's total. Don't add retries around writes
   beyond the single auth-refresh retry. After a write, refresh the cached day
@@ -84,6 +86,34 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   (`_get_user_metadata`, `_get_food_item_details`, `_get_exercises`), so check
   that they still exist before bumping it. The upper bounds on `mcp` and
   `curl-cffi` stay until someone has tested a new major against a real account.
+
+## Protect existing users
+
+People install this from PyPI and wire it into their MCP clients, prompts, and
+scripts. A release that changes what they depend on breaks their setup without
+warning. Their public surface is:
+
+- Tool names, parameter names, defaults, and the shape of what tools return.
+- CLI commands and flags (`mfp-mcp`, `myfitnesspal-mcp`, `serve`, `auth`,
+  `--http`, `--host`, `--port`).
+- Environment variables (`MFP_COOKIE`, `MFP_USERNAME`, `MFP_IMPERSONATE`,
+  `MFP_SYNC_DAYS`, `MFP_MCP_DATA_DIR`).
+- Where files live and what's in them (`cookies.json`, the SQLite database).
+- Supported Python versions and dependency ranges.
+
+Avoid changing any of these. When a change is needed, make it additive: add a
+new optional parameter whose default keeps today's behavior, keep an old name
+working next to its replacement, and migrate stored data in place instead of
+asking users to reset it.
+
+When a change will still be felt after an upgrade, flag it. That covers a
+breaking change, a new default, a changed return shape, a renamed or removed
+tool, or data that needs migrating. Stop and tell the user before implementing
+it, and say what breaks and for whom. In the PR, add a **User impact** section
+that says what changes on upgrade and what users need to do. In
+`CHANGELOG.md`, list it under **Changed** or **Removed** with the same
+migration note. This project is pre-1.0, so a breaking release bumps the minor
+version.
 
 ## Code standards
 
