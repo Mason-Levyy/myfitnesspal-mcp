@@ -40,8 +40,11 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   SQL don't go here.
 - `food_logging.py` owns the draft, confirm, and pin flow for logging food.
   `food_ranking.py` ranks candidates as pure functions.
-- `diary.py` makes the MFP web requests: food search, diary add and remove,
-  weight, water, notes, and exercise. Each function takes the client first.
+- One module per MFP feature makes the web requests: `diary.py` (meals,
+  entries, adding and removing food), `food_search.py`, `measurements.py`,
+  `water.py`, `notes.py`, and `exercise.py`. Each function takes the client
+  first. Request plumbing they share (URLs, headers, csrf pages, status checks)
+  lives in `mfp_web.py`.
 - `mfp_client.py` holds the `curl_cffi` client, the cached instance, and
   `is_auth_error`. `auth.py` captures and stores cookies, `refresh.py` renews
   the session in a headless browser, and `config.py` reads env vars and paths.

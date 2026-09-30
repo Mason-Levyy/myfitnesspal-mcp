@@ -3,7 +3,7 @@ import datetime
 import pytest
 from lxml import html as lh
 
-from myfitnesspal_mcp import diary
+from myfitnesspal_mcp import diary, exercise
 
 TODAY = datetime.date(2026, 9, 10)
 
@@ -18,7 +18,7 @@ def _posts(client):
 
 
 def test_exercise_page_uses_username_url_and_reads_token(exercise_client):
-    _, token = diary.exercise_page(exercise_client, TODAY)
+    _, token = exercise.exercise_page(exercise_client, TODAY)
     assert token == "EXERCISETOKEN"
     _, url, _ = exercise_client.session.calls[-1]
     assert url.endswith("exercise/diary/tester?date=2026-09-10")
@@ -27,7 +27,7 @@ def test_exercise_page_uses_username_url_and_reads_token(exercise_client):
 def test_exercise_entries_parse_cardio_rows(exercise_doc):
     cardio = [
         e
-        for e in diary.exercise_entries(exercise_doc)
+        for e in exercise.exercise_entries(exercise_doc)
         if e["section"] == "cardiovascular"
     ]
     assert cardio == [
@@ -58,7 +58,7 @@ def test_exercise_entries_parse_cardio_rows(exercise_doc):
 def test_exercise_entries_parse_strength_rows_with_their_own_columns(exercise_doc):
     strength = [
         e
-        for e in diary.exercise_entries(exercise_doc)
+        for e in exercise.exercise_entries(exercise_doc)
         if e["section"] == "strength training"
     ]
     assert strength == [
@@ -82,12 +82,14 @@ def test_exercise_entries_parse_strength_rows_with_their_own_columns(exercise_do
 
 
 def test_exercise_entries_skip_total_rows(exercise_doc):
-    names = [e["name"] for e in diary.exercise_entries(exercise_doc)]
+    names = [e["name"] for e in exercise.exercise_entries(exercise_doc)]
     assert not any("Total" in name for name in names)
 
 
 def test_delete_exercise_removes_single_exact_match(exercise_client):
-    result = diary.delete_exercise(exercise_client, TODAY, "running (jogging), 8 kph")
+    result = exercise.delete_exercise(
+        exercise_client, TODAY, "running (jogging), 8 kph"
+    )
     assert result["count"] == 1
     assert result["removed"][0]["entry_id"] == "222"
     posts = _posts(exercise_client)
@@ -102,18 +104,20 @@ def test_delete_exercise_removes_single_exact_match(exercise_client):
 
 
 def test_delete_exercise_strength_entry(exercise_client):
-    result = diary.delete_exercise(exercise_client, TODAY, "bench")
+    result = exercise.delete_exercise(exercise_client, TODAY, "bench")
     assert [r["entry_id"] for r in result["removed"]] == ["444"]
 
 
 def test_delete_exercise_ambiguous_by_default(exercise_client):
     with pytest.raises(diary.AmbiguousEntry, match="all_matches=True"):
-        diary.delete_exercise(exercise_client, TODAY, "aerobics")
+        exercise.delete_exercise(exercise_client, TODAY, "aerobics")
     assert _posts(exercise_client) == []
 
 
 def test_delete_exercise_all_matches_removes_every_match(exercise_client):
-    result = diary.delete_exercise(exercise_client, TODAY, "aerobics", all_matches=True)
+    result = exercise.delete_exercise(
+        exercise_client, TODAY, "aerobics", all_matches=True
+    )
     assert result["count"] == 2
     assert result["day"] == TODAY.isoformat()
     assert [r["entry_id"] for r in result["removed"]] == ["111", "333"]
@@ -126,12 +130,12 @@ def test_delete_exercise_all_matches_removes_every_match(exercise_client):
 @pytest.mark.parametrize("all_matches", [False, True])
 def test_delete_exercise_no_match_lists_logged_entries(exercise_client, all_matches):
     with pytest.raises(diary.NoMatchingEntry, match="Running \\(jogging\\)"):
-        diary.delete_exercise(
+        exercise.delete_exercise(
             exercise_client, TODAY, "swimming", all_matches=all_matches
         )
     assert _posts(exercise_client) == []
 
 
 def test_delete_exercise_is_case_insensitive(exercise_client):
-    result = diary.delete_exercise(exercise_client, TODAY, "PULL UP")
+    result = exercise.delete_exercise(exercise_client, TODAY, "PULL UP")
     assert result["removed"][0]["entry_id"] == "555"

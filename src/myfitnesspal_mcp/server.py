@@ -5,7 +5,18 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from . import diary, food_logging, mfp_client, refresh, sync
+from . import (
+    diary,
+    exercise,
+    food_logging,
+    food_search,
+    measurements,
+    mfp_client,
+    notes,
+    refresh,
+    sync,
+    water,
+)
 from .food_ranking import MacroTargets
 from .store import Store, trend_column
 
@@ -116,7 +127,7 @@ async def fitness_search_food(
     def op(store, client):
         return {
             "query": query,
-            "results": diary.search_food(client, query, limit, with_macros),
+            "results": food_search.search_food(client, query, limit, with_macros),
         }
 
     return await with_session(ctx, op)
@@ -126,7 +137,7 @@ async def fitness_search_food(
 async def fitness_draft_food(
     query: str,
     quantity: float = 1.0,
-    meal: str = "breakfast",
+    meal: str = food_logging.DEFAULT_MEAL,
     date: str | None = None,
     min_calories: float | None = None,
     max_calories: float | None = None,
@@ -166,7 +177,14 @@ async def fitness_draft_food(
 
     def op(store, client):
         return food_logging.draft_food(
-            client, store, query, day, meal, quantity, targets, limit
+            client,
+            store,
+            query,
+            day,
+            meal=meal,
+            quantity=quantity,
+            targets=targets,
+            limit=limit,
         )
 
     return await with_session(ctx, op)
@@ -203,12 +221,15 @@ async def fitness_log_food(
     date: YYYY-MM-DD (default today).
     """
     explicit_day = parse_day(date) if date else None
+    day = explicit_day or parse_day(None)
+    chosen_meal = meal or food_logging.DEFAULT_MEAL
+    chosen_quantity = 1.0 if quantity is None else quantity
 
     def op(store, client):
         if draft_id is not None:
             if option is None:
                 raise ValueError("option is required with draft_id")
-            result = food_logging.log_from_draft(
+            return food_logging.log_from_draft(
                 client,
                 store,
                 draft_id,
@@ -219,32 +240,21 @@ async def fitness_log_food(
                 day=explicit_day,
                 pin=pin,
             )
-        elif food_id is not None and weight_id is not None:
+        if food_id is not None and weight_id is not None:
             food = {
                 "food_id": food_id,
                 "weight_id": weight_id,
                 "name": query or food_id,
             }
             logged = food_logging.log_exact(
-                client,
-                food,
-                explicit_day or parse_day(None),
-                meal or "breakfast",
-                1.0 if quantity is None else quantity,
+                client, food, day, chosen_meal, quantity=chosen_quantity
             )
-            result = {**logged, "source": "ids"}
-        elif query:
-            result = food_logging.log_by_query(
-                client,
-                store,
-                query,
-                explicit_day or parse_day(None),
-                meal or "breakfast",
-                1.0 if quantity is None else quantity,
+            return {**logged, "source": "ids"}
+        if query:
+            return food_logging.log_by_query(
+                client, store, query, day, meal=chosen_meal, quantity=chosen_quantity
             )
-        else:
-            raise ValueError("pass draft_id + option, food_id + weight_id, or query")
-        return result
+        raise ValueError("pass draft_id + option, food_id + weight_id, or query")
 
     result = await with_session(ctx, op)
     if not result.get("logged"):
@@ -306,7 +316,7 @@ async def fitness_delete_food(
 async def fitness_modify_food(
     query: str,
     new_query: str | None = None,
-    meal: str = "breakfast",
+    meal: str = food_logging.DEFAULT_MEAL,
     quantity: float | None = None,
     date: str | None = None,
     draft_id: str | None = None,
@@ -338,9 +348,9 @@ async def fitness_modify_food(
             store,
             day,
             meal,
-            query,
-            new_query,
-            quantity,
+            query=query,
+            new_query=new_query,
+            quantity=quantity,
             draft_id=draft_id,
             option=option,
             serving=serving,
@@ -365,7 +375,7 @@ async def fitness_log_weight(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.set_weight(client, day, weight)
+        result = measurements.set_weight(client, day, weight)
         store.upsert_nutrition(day.isoformat(), weight=result["weight"])
         return {"ok": True, **result}
 
@@ -393,7 +403,7 @@ async def fitness_log_water(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.log_water(client, day, amount, unit, replace=replace)
+        result = water.log_water(client, day, amount, unit, replace=replace)
         store.upsert_nutrition(day.isoformat(), water_ml=result["water_ml"])
         return {"ok": True, **result}
 
@@ -409,7 +419,7 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
     day = parse_day(date)
 
     def op(store, client):
-        return diary.get_exercise(client, day)
+        return exercise.get_exercise(client, day)
 
     return await with_session(ctx, op)
 
@@ -428,8 +438,8 @@ async def fitness_get_exercise_entries(
     day = parse_day(date)
 
     def op(store, client):
-        doc, _ = diary.exercise_page(client, day)
-        return {"day": day.isoformat(), "entries": diary.exercise_entries(doc)}
+        doc, _ = exercise.exercise_page(client, day)
+        return {"day": day.isoformat(), "entries": exercise.exercise_entries(doc)}
 
     return await with_session(ctx, op)
 
@@ -456,7 +466,7 @@ async def fitness_delete_exercise(
     day = parse_day(date)
 
     def op(store, client):
-        return diary.delete_exercise(client, day, query, all_matches=all_matches)
+        return exercise.delete_exercise(client, day, query, all_matches=all_matches)
 
     return await with_session(ctx, op)
 
@@ -471,7 +481,7 @@ async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict
     day = parse_day(date)
 
     def op(store, client):
-        body = diary.get_note(client, day)
+        body = notes.get_note(client, day)
         store.set_note(day.isoformat(), body)
         return {"day": day.isoformat(), "note": body}
 
@@ -492,7 +502,7 @@ async def fitness_log_note(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.push_note(client, day, text, append=append)
+        result = notes.push_note(client, day, text, append=append)
         store.set_note(day.isoformat(), result["note"])
         return {"ok": True, **result}
 

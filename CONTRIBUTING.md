@@ -45,7 +45,11 @@ To exercise the server against a real account, follow the
 | Path | Purpose |
 | --- | --- |
 | `src/myfitnesspal_mcp/server.py` | MCP tool definitions (`fitness_*`) |
-| `src/myfitnesspal_mcp/diary.py` | Diary read/write against MFP endpoints |
+| `src/myfitnesspal_mcp/food_logging.py` | Draft, confirm, and pin flow for logging food |
+| `src/myfitnesspal_mcp/diary.py` | Food diary meals, entries, and adding/removing food |
+| `src/myfitnesspal_mcp/food_search.py` | Food search and per-food details |
+| `src/myfitnesspal_mcp/measurements.py`, `water.py`, `notes.py`, `exercise.py` | One module per remaining MFP diary feature |
+| `src/myfitnesspal_mcp/mfp_web.py` | Request plumbing shared by the MFP endpoint modules |
 | `src/myfitnesspal_mcp/mfp_client.py` | `curl_cffi` session with a Chrome TLS fingerprint |
 | `src/myfitnesspal_mcp/auth.py` | Cookie capture, storage, and validation |
 | `src/myfitnesspal_mcp/refresh.py` | Headless-browser session refresh |

@@ -2,7 +2,7 @@ import logging
 from contextlib import contextmanager
 from datetime import date, timedelta
 
-from . import config, diary
+from . import config, notes
 from .mfp_client import is_auth_error
 from .store import Store
 
@@ -75,7 +75,7 @@ def refresh_day(store: Store, client, day: date) -> None:
     )
 
     with tolerating_failures(f"note fetch for {day}"):
-        store.set_note(key, diary.get_note(client, day))
+        store.set_note(key, notes.get_note(client, day))
 
     store.mark_diary_synced(key)
 

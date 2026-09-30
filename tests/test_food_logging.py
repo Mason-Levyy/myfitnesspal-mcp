@@ -122,7 +122,9 @@ def test_pin_survives_details_failure_on_confirm(client, store):
 
 def test_bare_query_uses_pin_without_searching(client, store):
     store.set_pin("banana", "555", "77", "Banana, organic", "1 small")
-    result = food_logging.log_by_query(client, store, "Banana", TODAY, "lunch", 1.0)
+    result = food_logging.log_by_query(
+        client, store, "Banana", TODAY, meal="lunch", quantity=1.0
+    )
     assert result["source"] == "pin"
     assert not any("food/search" in url for _, url, _ in client.session.calls)
     _, _, kwargs = _food_adds(client)[-1]
@@ -133,7 +135,7 @@ def test_bare_query_uses_pin_without_searching(client, store):
 
 def test_bare_query_logs_single_exact_match(banana_details, store):
     result = food_logging.log_by_query(
-        banana_details, store, "banana", TODAY, "breakfast", 1.0
+        banana_details, store, "banana", TODAY, meal="breakfast", quantity=1.0
     )
     assert result["source"] == "exact_match"
     assert result["weight_id"] == "10"
@@ -146,7 +148,7 @@ def test_bare_exact_match_skips_details_calls(banana_details, store, monkeypatch
 
     monkeypatch.setattr(banana_details, "_get_food_item_details", details_must_not_run)
     result = food_logging.log_by_query(
-        banana_details, store, "Banana", TODAY, "breakfast", 1.0
+        banana_details, store, "Banana", TODAY, meal="breakfast", quantity=1.0
     )
     assert result["source"] == "exact_match"
     assert result["serving"] == "1 medium"
@@ -156,18 +158,18 @@ def test_bare_exact_match_skips_details_calls(banana_details, store, monkeypatch
 
 def test_pin_and_exact_paths_report_one_shape(banana_details, store):
     exact = food_logging.log_by_query(
-        banana_details, store, "banana", TODAY, "breakfast", 1.0
+        banana_details, store, "banana", TODAY, meal="breakfast", quantity=1.0
     )
     store.set_pin("banana", "111", "20", "Banana", "1 large")
     pinned = food_logging.log_by_query(
-        banana_details, store, "banana", TODAY, "breakfast", 1.0
+        banana_details, store, "banana", TODAY, meal="breakfast", quantity=1.0
     )
     assert set(exact) == set(pinned)
 
 
 def test_bare_ambiguous_query_returns_draft_and_logs_nothing(banana_details, store):
     result = food_logging.log_by_query(
-        banana_details, store, "bread", TODAY, "breakfast", 1.0
+        banana_details, store, "bread", TODAY, meal="breakfast", quantity=1.0
     )
     assert result["logged"] is None
     assert result["needs_choice"] is True
@@ -190,7 +192,7 @@ def _posts_to(client, fragment):
 
 def test_modify_replaces_with_exact_match_using_one_diary_fetch(banana_details, store):
     result = food_logging.modify_food(
-        banana_details, store, TODAY, "breakfast", "coffee", "banana"
+        banana_details, store, TODAY, "breakfast", query="coffee", new_query="banana"
     )
     assert result["removed"] == "Coffee, 1 cup"
     assert result["logged"] == "Banana"
@@ -206,7 +208,7 @@ def test_modify_replaces_with_exact_match_using_one_diary_fetch(banana_details, 
 def test_modify_uses_pin_for_replacement(client, store):
     store.set_pin("protein shake", "555", "77", "Whey Shake", "1 scoop")
     result = food_logging.modify_food(
-        client, store, TODAY, "breakfast", "coffee", "Protein  Shake"
+        client, store, TODAY, "breakfast", query="coffee", new_query="Protein  Shake"
     )
     assert result["source"] == "pin"
     _, _, kwargs = _posts_to(client, "food/add")[-1]
@@ -216,7 +218,7 @@ def test_modify_uses_pin_for_replacement(client, store):
 
 def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
     result = food_logging.modify_food(
-        banana_details, store, TODAY, "breakfast", "coffee", "bread"
+        banana_details, store, TODAY, "breakfast", query="coffee", new_query="bread"
     )
     assert result["needs_choice"] is True
     assert result["removed"] is None
@@ -227,7 +229,7 @@ def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
         store,
         TODAY,
         "breakfast",
-        "coffee",
+        query="coffee",
         draft_id=result["draft_id"],
         option=1,
     )
