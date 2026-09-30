@@ -92,7 +92,9 @@ This server signs in with your browser's MyFitnessPal session cookie:
 4. Paste it into the `mfp-mcp auth` prompt
 
 Sessions last around 30 days. When one expires, either re-run `auth` or
-enable auto-refresh so you never have to.
+enable auto-refresh so you never have to. `mfp-mcp auth --check` reports
+whether the saved session still works and whether auto-refresh is set up,
+without prompting or changing anything.
 
 ### Auto-refresh (recommended)
 
@@ -210,8 +212,8 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
 - **403 / Cloudflare blocked**: try `MFP_IMPERSONATE=chrome124` (or another
   [curl_cffi target](https://github.com/lexiforest/curl_cffi#supported-browsers)).
   Datacenter IPs get challenged far more than residential ones.
-- **"Session expired"**: re-run `mfp-mcp auth`, or set up
-  [auto-refresh](#auto-refresh-recommended).
+- **"Session expired"**: confirm with `mfp-mcp auth --check`, then re-run
+  `mfp-mcp auth`, or set up [auto-refresh](#auto-refresh-recommended).
 - **"couldn't read your MyFitnessPal profile"**: MFP's profile endpoint 500s
   for some accounts. Set `MFP_USERNAME` to your username (not your email).
 - **curl_cffi install issues**: prebuilt wheels cover Linux/macOS/Windows;
