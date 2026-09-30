@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format follows
   still accepts it, and whether auto-refresh is ready. It never prompts or
   saves, and exits 1 when the session needs attention.
 
+### Fixed
+
+- Food diary reads and writes, and cache syncs, use `/food/diary?date=`
+  instead of `/food/diary/{username}?date=`. Since 2026-09-30 MyFitnessPal
+  answers the username form with its marketing homepage, which made every
+  diary write fail as signed out and let syncs cache days as empty (#24).
+
 ## [0.4.0] - 2026-09-28
 
 ### Added

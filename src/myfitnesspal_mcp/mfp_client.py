@@ -77,6 +77,11 @@ class CurlCffiClient(myfitnesspal.Client):
             )
         return {"username": username}
 
+    def _get_url_for_date(self, date, username, friend_username=None) -> str:
+        if friend_username is not None:
+            return super()._get_url_for_date(date, username, friend_username)
+        return diary.food_diary_url(self, date)
+
 
 def cookies_to_jar(cookies: dict[str, str]) -> CookieJar:
     jar = CookieJar()
