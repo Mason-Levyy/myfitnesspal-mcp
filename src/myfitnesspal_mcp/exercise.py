@@ -42,9 +42,6 @@ def _exercise_name(cell) -> str:
 
 
 def exercise_entries(doc) -> list[dict]:
-    """Deletable rows from every exercise section table. Each entry carries
-    the section ("cardiovascular", "strength training") plus that section's
-    own columns, e.g. minutes/calories_burned or sets/reps_set/weight_set."""
     entries = []
     for table in doc.xpath("//table[contains(@class, 'table0')]"):
         headings = table.xpath("./thead/tr[1]/td")
@@ -80,8 +77,6 @@ def remove_exercise_entry(client, entry_id: str, token: str) -> None:
 
 
 def delete_exercise(client, day: date, query: str, all_matches: bool = False) -> dict:
-    """Default: exactly one entry, resolved like delete_food. all_matches:
-    every entry whose name contains `query` (e.g. Garmin's duplicate rows)."""
     doc, token = exercise_page(client, day)
     entries = exercise_entries(doc)
     if all_matches:
