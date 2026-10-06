@@ -286,6 +286,24 @@ class Store:
         return {r["day"] for r in rows}
 
     @_serialized
+    def days_missing_completion(self, start: str, end: str) -> set[str]:
+        rows = self.conn.execute(
+            "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ? "
+            "AND diary_synced = 1 AND diary_complete IS NULL",
+            (start, end),
+        ).fetchall()
+        return {r["day"] for r in rows}
+
+    @_serialized
+    def days_marked_complete(self, start: str, end: str) -> set[str]:
+        rows = self.conn.execute(
+            "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ? "
+            "AND diary_complete = 1",
+            (start, end),
+        ).fetchall()
+        return {r["day"] for r in rows}
+
+    @_serialized
     def trend(self, metric: str, start: str, end: str) -> list[dict]:
         rows = self.conn.execute(
             f"SELECT day, {trend_column(metric)} AS value FROM day_nutrition "

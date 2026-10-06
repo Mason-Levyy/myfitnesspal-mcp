@@ -160,3 +160,10 @@ def test_complete_day_tool_caches_the_state(toggles, diary_html, tmp_path, monke
     result = asyncio.run(server.fitness_complete_day(date="2026-07-08"))
     assert result["ok"] is True and result["complete"] is True
     assert store.day_record("2026-07-08")["complete"] is True
+
+
+def test_client_reads_a_low_calorie_completed_day_as_complete(diary_html):
+    from lxml import html as lh
+
+    doc = lh.fromstring(with_box(diary_html, COMPLETE_LOW_CALORIES))
+    assert mfp_client.CurlCffiClient._get_completion(None, doc) is True

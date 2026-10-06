@@ -299,3 +299,13 @@ def test_day_record_of_an_unknown_day_has_no_goals():
     record = Store(Path(":memory:")).day_record("2026-07-01")
     assert record["nutrition"] is None
     assert set(record["remaining"].values()) == {None}
+
+
+def test_export_carries_completion():
+    from myfitnesspal_mcp.store import Store
+
+    store = Store(Path(":memory:"))
+    store.upsert_nutrition("2026-07-01", calories=1800.0, diary_complete=1)
+    store.upsert_nutrition("2026-07-02", calories=1900.0)
+    exported = store.export_range("2026-07-01", "2026-07-02")
+    assert [record["complete"] for record in exported] == [True, None]

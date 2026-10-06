@@ -48,6 +48,7 @@ class FakeDay:
         }
         self.goals = {"calories": 2200}
         self.water = 750
+        self.complete = False
         self.meals = [
             FakeMeal(
                 "breakfast", [FakeEntry("Oats", {"calories": 300, "protein": 10})]
@@ -180,7 +181,7 @@ def test_poll_backfills_weight_for_already_cached_day(store):
     window_start = TODAY - datetime.timedelta(days=2)
     yesterday = TODAY - datetime.timedelta(days=1)
     for day in (window_start, yesterday):
-        store.upsert_nutrition(day.isoformat(), calories=2000.0)
+        store.upsert_nutrition(day.isoformat(), calories=2000.0, diary_complete=1)
         store.mark_diary_synced(day.isoformat())
 
     client = FakeSyncClient()
@@ -254,3 +255,47 @@ def test_poll_skips_bad_days_without_auth_errors(store):
     client = FlakyClient()
     sync.poll(store, client, days=2, force=True)
     assert len(client.fetched) == 2
+
+
+def cache_synced_days(store, days, complete):
+    for day in days:
+        store.upsert_nutrition(
+            day.isoformat(), calories=2000.0, diary_complete=complete
+        )
+        store.mark_diary_synced(day.isoformat())
+
+
+def test_refresh_day_stores_completion(store):
+    client = FakeSyncClient()
+    complete_day = FakeDay()
+    complete_day.complete = True
+    client.get_date = lambda day: complete_day
+    sync.refresh_day(store, client, TODAY)
+    assert store.day_record(TODAY.isoformat())["complete"] is True
+
+
+def test_poll_fetches_days_cached_before_completion_was_tracked_once(store):
+    old_days = [TODAY - datetime.timedelta(days=offset) for offset in (10, 11)]
+    cache_synced_days(store, old_days, complete=None)
+
+    client = FakeSyncClient()
+    sync.poll(store, client, days=14, force=True, today=TODAY)
+    assert set(old_days) <= set(client.fetched)
+
+    client.fetched.clear()
+    sync.poll(store, client, days=14, force=True, today=TODAY)
+    assert not set(old_days) & set(client.fetched)
+
+
+def test_poll_rechecks_recent_days_not_yet_complete(store):
+    incomplete_recent = TODAY - datetime.timedelta(days=2)
+    complete_recent = TODAY - datetime.timedelta(days=3)
+    incomplete_old = TODAY - datetime.timedelta(days=sync.RECHECK_INCOMPLETE_DAYS + 2)
+    cache_synced_days(store, [incomplete_recent, incomplete_old], complete=0)
+    cache_synced_days(store, [complete_recent], complete=1)
+
+    client = FakeSyncClient()
+    sync.poll(store, client, days=14, force=True, today=TODAY)
+    assert incomplete_recent in client.fetched
+    assert complete_recent not in client.fetched
+    assert incomplete_old not in client.fetched

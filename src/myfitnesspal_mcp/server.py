@@ -744,8 +744,9 @@ async def fitness_bulk_export(
     ctx: Context = None,
 ) -> dict:
     """Export a whole date range at once for analysis: per-day nutrition
-    totals, food entries with macros, the MyFitnessPal daily note, and local
-    feel notes. Read-only.
+    totals, goals and remaining, whether the day is marked complete in
+    MyFitnessPal (`complete`, null if not known), food entries with macros,
+    the MyFitnessPal daily note, and local feel notes. Read-only.
 
     start/end: YYYY-MM-DD (default: last 30 days ending today).
     sync_first: gap-fill from MyFitnessPal before exporting. Off by default so

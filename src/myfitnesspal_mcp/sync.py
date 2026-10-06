@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 _poll_lock = threading.Lock()
 
+RECHECK_INCOMPLETE_DAYS = 7
+
 
 @contextmanager
 def tolerating_failures(description: str):
@@ -69,6 +71,7 @@ def refresh_day(store: Store, client, day: date) -> None:
         goal_protein=first_number(mfp_day.goals or {}, "protein"),
         goal_carbs=first_number(mfp_day.goals or {}, "carbohydrates", "carbs"),
         goal_fat=first_number(mfp_day.goals or {}, "fat"),
+        diary_complete=int(mfp_day.complete),
     )
 
     store.replace_diary(
@@ -105,9 +108,17 @@ def poll(
 def _poll_window(store: Store, client, days: int | None, today: date) -> None:
     lookback = days or config.sync_days()
     window_start = today - timedelta(days=lookback - 1)
-    cached = store.days_with_synced_diary(
-        window_start.isoformat(), (today - timedelta(days=1)).isoformat()
-    )
+    yesterday = (today - timedelta(days=1)).isoformat()
+    cached = store.days_with_synced_diary(window_start.isoformat(), yesterday)
+    # Days cached by a release that didn't track completion are fetched once more.
+    cached -= store.days_missing_completion(window_start.isoformat(), yesterday)
+    # A day is often completed in the app after it was cached, so the last
+    # RECHECK_INCOMPLETE_DAYS days not yet marked complete are fetched again.
+    recent = max(window_start, today - timedelta(days=RECHECK_INCOMPLETE_DAYS))
+    completed = store.days_marked_complete(recent.isoformat(), yesterday)
+    cached -= {
+        day for day in cached if day >= recent.isoformat() and day not in completed
+    }
 
     for day in days_to_fetch(cached, lookback, today):
         with tolerating_failures(f"sync for {day}"):
