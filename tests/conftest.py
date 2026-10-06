@@ -88,6 +88,74 @@ def diary_after_add(before_html, new_row=ADDED_ROW):
     return respond
 
 
+MY_FOODS_API = [
+    {
+        "id": "5001",
+        "version": "5001",
+        "brand_name": "Corner Cafe",
+        "description": "Veggie Bowl",
+        "serving_sizes": [{"value": 1, "unit": "bowl", "nutrition_multiplier": 1}],
+        "nutritional_contents": {
+            "energy": {"unit": "calories", "value": 520},
+            "protein": 18,
+            "carbohydrates": 70,
+            "fat": 19,
+        },
+    }
+]
+MEALS_API = [
+    {
+        "meal_id": 42,
+        "description": "Morning smoothie",
+        "foods": [
+            {"description": "Whey powder, 1 scoop", "calories": 100, "protein": 25},
+            {"description": "Berries, 0.5 cup", "calories": 35, "protein": 0},
+        ],
+    }
+]
+CHILI = {
+    "id": "7001",
+    "name": "Turkey Chili",
+    "servings": 4.0,
+    "nutritional_contents": {
+        "energy": {"unit": "calories", "value": 1600.0},
+        "protein": 160.0,
+        "carbohydrates": 120.0,
+        "fat": 40.0,
+    },
+}
+RECIPES_API = {"items": [CHILI]}
+
+
+@pytest.fixture
+def library(client):
+    """The fake client with your own foods, saved meals and recipes."""
+    session = client.session
+    session.route(
+        "GET",
+        "food/load_my_foods",
+        FakeResponse(text=(FIXTURES / "favorites_my_foods.html").read_text()),
+    )
+    session.route(
+        "GET",
+        "food/load_meals",
+        FakeResponse(text=(FIXTURES / "favorites_meals.html").read_text()),
+    )
+    session.route(
+        "GET",
+        "food/load_recipes",
+        FakeResponse(text=(FIXTURES / "favorites_recipes.html").read_text()),
+    )
+    session.route(
+        "GET", "api/services/users/foods/mine", FakeResponse(json_data=MY_FOODS_API)
+    )
+    session.route(
+        "GET", "api/services/users/meals/mine", FakeResponse(json_data=MEALS_API)
+    )
+    session.route("GET", "v2/recipes", FakeResponse(json_data=RECIPES_API))
+    return client
+
+
 @pytest.fixture
 def make_response():
     return FakeResponse

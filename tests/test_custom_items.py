@@ -2,78 +2,21 @@ import asyncio
 import datetime
 
 import pytest
-from conftest import FIXTURES, FakeResponse, diary_after_add
+from conftest import CHILI, RECIPES_API, FakeResponse, diary_after_add
 
 from myfitnesspal_mcp import custom_items, diary, mfp_client, server
 from myfitnesspal_mcp.store import Store
 
 TODAY = datetime.date(2026, 7, 8)
 
-MY_FOODS_API = [
-    {
-        "id": "5001",
-        "version": "5001",
-        "brand_name": "Corner Cafe",
-        "description": "Veggie Bowl",
-        "serving_sizes": [{"value": 1, "unit": "bowl", "nutrition_multiplier": 1}],
-        "nutritional_contents": {
-            "energy": {"unit": "calories", "value": 520},
-            "protein": 18,
-            "carbohydrates": 70,
-            "fat": 19,
-        },
-    }
-]
-MEALS_API = [
-    {
-        "meal_id": 42,
-        "description": "Morning smoothie",
-        "foods": [
-            {"description": "Whey powder, 1 scoop", "calories": 100, "protein": 25},
-            {"description": "Berries, 0.5 cup", "calories": 35, "protein": 0},
-        ],
-    }
-]
-CHILI = {
-    "id": "7001",
-    "name": "Turkey Chili",
-    "servings": 4.0,
-    "nutritional_contents": {
-        "energy": {"unit": "calories", "value": 1600.0},
-        "protein": 160.0,
-        "carbohydrates": 120.0,
-        "fat": 40.0,
-    },
-}
-RECIPES_API = {"items": [CHILI]}
 SMOOTHIE_ROWS = (
     '<tr><td><a data-food-entry-id="smoothie-a{n}">Whey powder, 1 scoop</a></td></tr>'
     '<tr><td><a data-food-entry-id="smoothie-b{n}">Berries, 0.5 cup</a></td></tr>'
 )
 
 
-def fixture(name):
-    return FakeResponse(text=(FIXTURES / name).read_text())
-
-
 def food_adds(client):
     return [c for c in client.session.calls if c[0] == "POST" and "food/add" in c[1]]
-
-
-@pytest.fixture
-def library(client):
-    session = client.session
-    session.route("GET", "food/load_my_foods", fixture("favorites_my_foods.html"))
-    session.route("GET", "food/load_meals", fixture("favorites_meals.html"))
-    session.route("GET", "food/load_recipes", fixture("favorites_recipes.html"))
-    session.route(
-        "GET", "api/services/users/foods/mine", FakeResponse(json_data=MY_FOODS_API)
-    )
-    session.route(
-        "GET", "api/services/users/meals/mine", FakeResponse(json_data=MEALS_API)
-    )
-    session.route("GET", "v2/recipes", FakeResponse(json_data=RECIPES_API))
-    return client
 
 
 @pytest.fixture
