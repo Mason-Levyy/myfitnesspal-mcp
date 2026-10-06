@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     diary_synced INTEGER NOT NULL DEFAULT 0,
     goal_protein REAL,
     goal_carbs REAL,
-    goal_fat REAL
+    goal_fat REAL,
+    diary_complete INTEGER
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +77,7 @@ NUTRITION_FIELDS = (
     "goal_protein",
     "goal_carbs",
     "goal_fat",
+    "diary_complete",
 )
 
 GOAL_COLUMNS = {
@@ -89,6 +91,7 @@ ADDED_NUTRITION_COLUMNS = {
     "goal_protein": "REAL",
     "goal_carbs": "REAL",
     "goal_fat": "REAL",
+    "diary_complete": "INTEGER",
 }
 
 TREND_COLUMNS = {
@@ -304,6 +307,15 @@ class Store:
         }
 
     @_serialized
+    def complete(self, day: str) -> bool | None:
+        row = self.conn.execute(
+            "SELECT diary_complete FROM day_nutrition WHERE day = ?", (day,)
+        ).fetchone()
+        if row is None or row["diary_complete"] is None:
+            return None
+        return bool(row["diary_complete"])
+
+    @_serialized
     def day_record(self, day: str) -> dict:
         nutrition = self.nutrition(day)
         goals = self.goals(day)
@@ -314,6 +326,7 @@ class Store:
         }
         return {
             "day": day,
+            "complete": self.complete(day),
             "nutrition": nutrition,
             "goals": goals,
             "remaining": remaining,

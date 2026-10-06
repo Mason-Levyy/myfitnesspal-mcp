@@ -8,6 +8,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from . import (
     custom_items,
     custom_writes,
+    day_completion,
     diary,
     food_logging,
     mfp_client,
@@ -101,7 +102,8 @@ async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
 
     `goals` are the day's MyFitnessPal targets (calories, protein, carbs, fat)
     and `remaining` is goal minus what is logged (negative: over the goal);
-    null where MyFitnessPal has no goal.
+    null where MyFitnessPal has no goal. `complete` says whether the day is
+    marked complete in MyFitnessPal (null: not known yet).
 
     date: YYYY-MM-DD (default: today).
     """
@@ -276,6 +278,30 @@ async def fitness_log_food(
         **refresh_warning,
         "day": get_store().day_record(result["date"]),
     }
+
+
+@mcp.tool()
+async def fitness_complete_day(
+    complete: bool | None = True, date: str | None = None, ctx: Context = None
+) -> dict:
+    """Mark a MyFitnessPal diary day complete (the Food tab's "Complete This
+    Entry" button), or reopen it.
+
+    complete: true marks it complete, false reopens it ("Make Additional
+    Entries"), null only reports whether it is complete. date: YYYY-MM-DD
+    (default: today). Completing a day posts it to the user's MyFitnessPal
+    news feed with a five-week weight projection (MFP skips both when the day
+    is under its calorie minimum), so complete a day only when the user asks.
+    `message` is what MFP shows. The result is read back from the diary.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        result = day_completion.set_day_complete(client, day, complete)
+        store.upsert_nutrition(day.isoformat(), diary_complete=int(result["complete"]))
+        return result
+
+    return {"ok": True, **await with_session(ctx, op)}
 
 
 @mcp.tool()

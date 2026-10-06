@@ -260,6 +260,9 @@ def test_migration_adds_goal_columns_and_keeps_data(tmp_path):
     assert store.days_with_synced_diary("2026-07-01", "2026-07-01") == {"2026-07-01"}
     store.upsert_nutrition("2026-07-01", goal_protein=150.0)
     assert store.goals("2026-07-01")["protein"] == 150.0
+    assert store.complete("2026-07-01") is None
+    store.upsert_nutrition("2026-07-01", diary_complete=1)
+    assert store.complete("2026-07-01") is True
 
 
 def test_day_record_reports_goals_and_remaining():
