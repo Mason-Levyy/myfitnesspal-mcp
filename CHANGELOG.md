@@ -14,6 +14,9 @@ All notable changes to this project are documented here. The format follows
 - `auth --clipboard` waits for the session cookie on the macOS clipboard and
   connects as soon as you copy it, skipping anything that isn't a session
   token (such as the command itself) and any token that doesn't authenticate.
+- Day records (`fitness_get_day`, the `day` in write results, and
+  `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
+  `remaining` (goal minus logged; negative means over the goal).
 
 ### Changed
 
@@ -24,6 +27,11 @@ All notable changes to this project are documented here. The format follows
   also see 1 for a session that is about to lapse.
 - `cookies.json` now also holds MyFitnessPal's long-lived remember-me cookies
   next to the session token. The file's format is unchanged.
+- The cache database gains three `day_nutrition` columns (`goal_protein`,
+  `goal_carbs`, `goal_fat`), added in place on first start. No refetch
+  happens on upgrade, so days cached by an earlier release show null
+  protein, carbs and fat goals in `fitness_bulk_export` until
+  `fitness_get_day` or a write refetches them.
 
 ### Fixed
 

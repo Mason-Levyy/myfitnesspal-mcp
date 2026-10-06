@@ -229,3 +229,70 @@ def test_existing_database_gains_pin_and_draft_tables(tmp_path):
     store = Store(path)
     store.set_pin("banana", "111", "10", "Banana", None)
     assert store.pin("banana")["food_id"] == "111"
+
+
+def test_migration_adds_goal_columns_and_keeps_data(tmp_path):
+    from myfitnesspal_mcp.store import Store
+
+    path = tmp_path / "v041.db"
+    legacy = sqlite3.connect(str(path))
+    legacy.executescript(
+        """
+        CREATE TABLE day_nutrition (
+            day TEXT PRIMARY KEY, calories REAL, protein REAL, carbs REAL,
+            fat REAL, water_ml REAL, weight REAL, goal_calories REAL,
+            diary_synced INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO day_nutrition (day, calories, goal_calories, diary_synced)
+        VALUES ('2026-07-01', 1800.0, 2000.0, 1);
+        """
+    )
+    legacy.commit()
+    legacy.close()
+
+    store = Store(path)
+    assert store.goals("2026-07-01") == {
+        "calories": 2000.0,
+        "protein": None,
+        "carbs": None,
+        "fat": None,
+    }
+    assert store.days_with_synced_diary("2026-07-01", "2026-07-01") == {"2026-07-01"}
+    store.upsert_nutrition("2026-07-01", goal_protein=150.0)
+    assert store.goals("2026-07-01")["protein"] == 150.0
+
+
+def test_day_record_reports_goals_and_remaining():
+    from myfitnesspal_mcp.store import Store
+
+    store = Store(Path(":memory:"))
+    store.upsert_nutrition(
+        "2026-07-01",
+        calories=1850.0,
+        protein=171.5,
+        carbs=100.0,
+        goal_calories=2000.0,
+        goal_protein=160.0,
+        goal_carbs=200.0,
+    )
+    record = store.day_record("2026-07-01")
+    assert record["goals"] == {
+        "calories": 2000.0,
+        "protein": 160.0,
+        "carbs": 200.0,
+        "fat": None,
+    }
+    assert record["remaining"] == {
+        "calories": 150.0,
+        "protein": -11.5,
+        "carbs": 100.0,
+        "fat": None,
+    }
+
+
+def test_day_record_of_an_unknown_day_has_no_goals():
+    from myfitnesspal_mcp.store import Store
+
+    record = Store(Path(":memory:")).day_record("2026-07-01")
+    assert record["nutrition"] is None
+    assert set(record["remaining"].values()) == {None}

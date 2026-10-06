@@ -117,6 +117,20 @@ def test_refresh_day_populates_store(store):
     assert store.note(TODAY.isoformat()) == "today felt great"
 
 
+def test_refresh_day_stores_the_macro_goals(store):
+    client = FakeSyncClient()
+    goal_day = FakeDay()
+    goal_day.goals = {"calories": 2200, "protein": 160, "carbohydrates": 220, "fat": 70}
+    client.get_date = lambda day: goal_day
+    sync.refresh_day(store, client, TODAY)
+    assert store.goals(TODAY.isoformat()) == {
+        "calories": 2200.0,
+        "protein": 160.0,
+        "carbs": 220.0,
+        "fat": 70.0,
+    }
+
+
 def test_poll_skips_when_synced_today(store, monkeypatch):
     client = FakeSyncClient()
     store.mark_synced(TODAY)

@@ -164,7 +164,7 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 
 | Tool | What it does |
 | --- | --- |
-| `fitness_get_day` | Nutrition totals, diary entries, the MFP daily note, and feel note for a day |
+| `fitness_get_day` | Nutrition totals, goals and remaining macros, diary entries, the MFP daily note, and feel note for a day |
 | `fitness_search_food` | Candidate matches with brand, calories, macros, serving, and ids |
 | `fitness_draft_food` | Numbered options with every serving size, filtered/ranked by optional calorie and macro targets |
 | `fitness_log_food` | Log a draft option (and serving), a remembered food, or exact ids to the real diary |
@@ -181,7 +181,7 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_log_note` | Write that daily note to MFP (replace, or `append` a new line) |
 | `fitness_log_feel` | Save a subjective "how I feel" note (stored locally, never sent to MFP) |
 | `fitness_get_trends` | One metric over a date range: weight, calories_in, protein, carbs, fat |
-| `fitness_bulk_export` | Whole date range in one call, for analysis |
+| `fitness_bulk_export` | Whole date range in one call, for analysis, with goals and remaining |
 
 ### Logging flow
 
