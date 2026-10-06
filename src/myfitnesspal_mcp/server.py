@@ -99,6 +99,10 @@ async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
     local feel note for a day.
 
+    `goals` are the day's MyFitnessPal targets (calories, protein, carbs, fat)
+    and `remaining` is goal minus what is logged (negative: over the goal);
+    null where MyFitnessPal has no goal.
+
     date: YYYY-MM-DD (default: today).
     """
     day = parse_day(date)
