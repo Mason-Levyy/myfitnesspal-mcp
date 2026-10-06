@@ -251,6 +251,7 @@ def search_food(
             "verified": None,
             "food_id": result["food_id"],
             "weight_id": result["weight_id"],
+            "external_id": result["external_id"],
         }
         details = food_details(client, result["external_id"]) if with_macros else None
         if details:
