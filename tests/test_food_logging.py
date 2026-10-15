@@ -1,8 +1,9 @@
 import datetime
 
 import pytest
+from conftest import FakeResponse
 
-from myfitnesspal_mcp import food_logging
+from myfitnesspal_mcp import food_logging, mfp_client
 from myfitnesspal_mcp.food_ranking import MacroTargets
 
 TODAY = datetime.date(2026, 7, 8)
@@ -197,10 +198,13 @@ def test_modify_replaces_with_exact_match_using_one_diary_fetch(banana_details, 
     assert result["source"] == "exact_match"
     assert len(_posts_to(banana_details, "food/remove")) == 1
     assert len(_posts_to(banana_details, "food/add")) == 1
-    diary_fetches = [
-        url for _, url, _ in banana_details.session.calls if "food/diary" in url
-    ]
-    assert len(diary_fetches) == 1
+    calls = banana_details.session.calls
+    first_add = next(i for i, c in enumerate(calls) if "food/add" in c[1])
+    fetches_before_add = [c for c in calls[:first_add] if "food/diary" in c[1]]
+    fetches_after_add = [c for c in calls[first_add:] if "food/diary" in c[1]]
+    # one page serves the delete and the add; one read afterwards checks the add
+    assert len(fetches_before_add) == 1
+    assert len(fetches_after_add) == 1
 
 
 def test_modify_uses_pin_for_replacement(client, store):
@@ -235,3 +239,33 @@ def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
     assert confirmed["source"] == "draft"
     assert len(_posts_to(banana_details, "food/remove")) == 1
     assert len(_posts_to(banana_details, "food/add")) == 1
+
+
+EXACT_FOOD = {
+    "food_id": "111",
+    "weight_id": "10",
+    "name": "Banana",
+    "serving": "1 medium",
+}
+
+
+def test_log_exact_reports_the_entries_mfp_added(client):
+    result = food_logging.log_exact(client, EXACT_FOOD, TODAY, "snacks", 1.0)
+    assert result["logged"] == "Banana"
+    assert result["added_entries"] == [
+        {"meal": "snacks", "name": "Added Food, 1 serving"}
+    ]
+
+
+def test_log_exact_raises_when_the_diary_did_not_change(client, diary_html):
+    # /food/add answers 200 for any id; an unknown one adds nothing.
+    client.session.route("GET", "food/diary?date=", FakeResponse(text=diary_html))
+    with pytest.raises(food_logging.NothingLogged, match="nothing was logged"):
+        food_logging.log_exact(client, EXACT_FOOD, TODAY, "snacks", 1.0)
+
+
+def test_nothing_logged_never_triggers_a_session_refresh():
+    # The message quotes the food name, which can contain words the auth regex
+    # matches; a refresh would retry the call and post /food/add twice.
+    exc = food_logging.NothingLogged("Session Token Shake: nothing was logged")
+    assert not mfp_client.is_auth_error(exc)

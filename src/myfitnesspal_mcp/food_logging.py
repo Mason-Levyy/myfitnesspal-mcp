@@ -9,6 +9,19 @@ class DraftNotFound(RuntimeError):
     pass
 
 
+class NothingLogged(diary.DiaryLookupError):
+    pass
+
+
+def _added_entries(before_doc, after_doc) -> list[dict]:
+    before = {entry["entry_id"] for entry in diary.diary_entries(before_doc)}
+    return [
+        {"meal": entry["meal"], "name": entry["name"]}
+        for entry in diary.diary_entries(after_doc)
+        if entry["entry_id"] not in before
+    ]
+
+
 def _pinned_serving(pin: dict) -> dict:
     return {
         "weight_id": pin["weight_id"],
@@ -156,11 +169,25 @@ def log_exact(
     quantity: float,
     page: tuple | None = None,
 ) -> dict:
+    page = page or diary.diary_page(client, day)
     diary.push_food(
         client, day, meal, food["food_id"], food["weight_id"], quantity, page
     )
+    # /food/add answers 200 for any food_id/weight_id: one that belongs to another
+    # food logs that food, and one that matches nothing logs nothing. Reading the
+    # diary back is the only way to know what was added.
+    after, _ = diary.diary_page(client, day)
+    added = _added_entries(page[0], after)
+    if not added:
+        raise NothingLogged(
+            f"MyFitnessPal accepted {food['name']!r} (food_id {food['food_id']}, "
+            f"weight_id {food['weight_id']}) but no new entry appeared on "
+            f"{day.isoformat()}, so nothing was logged. Check the ids with "
+            "fitness_search_food or fitness_draft_food and log again."
+        )
     return {
         "logged": food["name"],
+        "added_entries": added,
         "food_id": food["food_id"],
         "weight_id": food["weight_id"],
         "serving": food.get("serving"),

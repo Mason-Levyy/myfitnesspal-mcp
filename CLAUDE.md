@@ -82,9 +82,9 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   releases. New tables go in `SCHEMA` as `CREATE ... IF NOT EXISTS`, and new
   columns on existing tables also go in `Store._migrate`.
 - **Dependency pins are deliberate.** `myfitnesspal` is pinned exactly because
-  `CurlCffiClient` overrides its private `_get_user_metadata` and `diary.py`
-  calls its private `_get_food_item_details` and `_get_exercises`, so check
-  that they still exist before bumping it. The upper bounds on `mcp` and
+  `CurlCffiClient` overrides its private `_get_user_metadata` and
+  `_get_completion`, and `diary.py` calls its private `_get_food_item_details`
+  and `_get_exercises`, so check that they still exist before bumping it. The upper bounds on `mcp` and
   `curl-cffi` stay until someone has tested a new major against a real account.
 
 ## Protect existing users

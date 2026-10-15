@@ -19,7 +19,11 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     water_ml REAL,
     weight REAL,
     goal_calories REAL,
-    diary_synced INTEGER NOT NULL DEFAULT 0
+    diary_synced INTEGER NOT NULL DEFAULT 0,
+    goal_protein REAL,
+    goal_carbs REAL,
+    goal_fat REAL,
+    diary_complete INTEGER
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +74,25 @@ NUTRITION_FIELDS = (
     "water_ml",
     "weight",
     "goal_calories",
+    "goal_protein",
+    "goal_carbs",
+    "goal_fat",
+    "diary_complete",
 )
+
+GOAL_COLUMNS = {
+    "calories": "goal_calories",
+    "protein": "goal_protein",
+    "carbs": "goal_carbs",
+    "fat": "goal_fat",
+}
+
+ADDED_NUTRITION_COLUMNS = {
+    "goal_protein": "REAL",
+    "goal_carbs": "REAL",
+    "goal_fat": "REAL",
+    "diary_complete": "INTEGER",
+}
 
 TREND_COLUMNS = {
     "weight": "weight",
@@ -141,6 +163,12 @@ class Store:
                 "OR goal_calories IS NOT NULL"
             )
             self.conn.commit()
+        for column, sql_type in ADDED_NUTRITION_COLUMNS.items():
+            if column not in columns:
+                self.conn.execute(
+                    f"ALTER TABLE day_nutrition ADD COLUMN {column} {sql_type}"
+                )
+                self.conn.commit()
 
     @_serialized
     def upsert_nutrition(self, day: str, **fields) -> None:
@@ -258,6 +286,24 @@ class Store:
         return {r["day"] for r in rows}
 
     @_serialized
+    def days_missing_completion(self, start: str, end: str) -> set[str]:
+        rows = self.conn.execute(
+            "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ? "
+            "AND diary_synced = 1 AND diary_complete IS NULL",
+            (start, end),
+        ).fetchall()
+        return {r["day"] for r in rows}
+
+    @_serialized
+    def days_marked_complete(self, start: str, end: str) -> set[str]:
+        rows = self.conn.execute(
+            "SELECT day FROM day_nutrition WHERE day >= ? AND day <= ? "
+            "AND diary_complete = 1",
+            (start, end),
+        ).fetchall()
+        return {r["day"] for r in rows}
+
+    @_serialized
     def trend(self, metric: str, start: str, end: str) -> list[dict]:
         rows = self.conn.execute(
             f"SELECT day, {trend_column(metric)} AS value FROM day_nutrition "
@@ -267,10 +313,41 @@ class Store:
         return [dict(r) for r in rows]
 
     @_serialized
+    def goals(self, day: str) -> dict:
+        row = self.conn.execute(
+            f"SELECT {', '.join(GOAL_COLUMNS.values())} FROM day_nutrition "
+            "WHERE day = ?",
+            (day,),
+        ).fetchone()
+        return {
+            name: (row[column] if row is not None else None)
+            for name, column in GOAL_COLUMNS.items()
+        }
+
+    @_serialized
+    def complete(self, day: str) -> bool | None:
+        row = self.conn.execute(
+            "SELECT diary_complete FROM day_nutrition WHERE day = ?", (day,)
+        ).fetchone()
+        if row is None or row["diary_complete"] is None:
+            return None
+        return bool(row["diary_complete"])
+
+    @_serialized
     def day_record(self, day: str) -> dict:
+        nutrition = self.nutrition(day)
+        goals = self.goals(day)
+        logged = nutrition or {}
+        remaining = {
+            name: None if goal is None else round(goal - (logged.get(name) or 0.0), 1)
+            for name, goal in goals.items()
+        }
         return {
             "day": day,
-            "nutrition": self.nutrition(day),
+            "complete": self.complete(day),
+            "nutrition": nutrition,
+            "goals": goals,
+            "remaining": remaining,
             "diary": self.diary(day),
             "note": self.note(day),
             "feel": self.feel(day),
