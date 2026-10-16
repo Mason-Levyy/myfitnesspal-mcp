@@ -13,7 +13,9 @@ def meal_id(doc, meal):
 
 
 def test_push_food_posts_the_given_food(client):
-    diary.push_food(client, TODAY, "snacks", "111", "10", quantity=2.0)
+    diary.push_food(
+        client, TODAY, "snacks", food_id="111", weight_id="10", quantity=2.0
+    )
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -28,7 +30,7 @@ def test_push_food_posts_the_given_food(client):
 
 
 def test_push_food_never_searches(client):
-    diary.push_food(client, TODAY, "lunch", "777", "88")
+    diary.push_food(client, TODAY, "lunch", food_id="777", weight_id="88")
     method, url, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[food_id]"] == "777"
     assert kwargs["data"]["food_entry[meal_id]"] == "1"
@@ -47,7 +49,7 @@ def test_push_food_resolves_extra_custom_meal_beyond_the_default_four(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "Snacks/Misc", "111", "10")
+    diary.push_food(client, TODAY, "Snacks/Misc", food_id="111", weight_id="10")
     method, url, kwargs = client.session.calls[-1]
     assert method == "POST"
     assert "food/add" in url
@@ -60,7 +62,9 @@ def test_push_food_resolves_sixth_custom_meal_case_insensitively(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "supplements/sauces/spreads", "111", "10")
+    diary.push_food(
+        client, TODAY, "supplements/sauces/spreads", food_id="111", weight_id="10"
+    )
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "5"
 
@@ -72,7 +76,7 @@ def test_push_food_raises_instead_of_silently_defaulting_to_meal_zero(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
     with pytest.raises(diary.UnknownMeal, match="no MyFitnessPal meal named"):
-        diary.push_food(client, TODAY, "brunch", "111", "10")
+        diary.push_food(client, TODAY, "brunch", food_id="111", weight_id="10")
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
 
@@ -82,7 +86,7 @@ def test_push_food_default_keyword_reaches_renamed_first_meal(
     client.session.route(
         "GET", "food/diary?date=", make_response(text=custom_meals_diary_html)
     )
-    diary.push_food(client, TODAY, "breakfast", "111", "10")
+    diary.push_food(client, TODAY, "breakfast", food_id="111", weight_id="10")
     _, _, kwargs = client.session.calls[-1]
     assert kwargs["data"]["food_entry[meal_id]"] == "0"
 
@@ -212,7 +216,7 @@ def test_diary_page_without_meal_sections_is_an_auth_error(client, make_response
         ),
     )
     with pytest.raises(diary.DiarySignedOut) as exc_info:
-        diary.push_food(client, TODAY, "breakfast", "111", "10")
+        diary.push_food(client, TODAY, "breakfast", food_id="111", weight_id="10")
     assert mfp_client.is_auth_error(exc_info.value)
     assert all("food/add" not in url for _, url, _ in client.session.calls)
 
