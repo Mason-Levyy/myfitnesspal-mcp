@@ -23,6 +23,24 @@ def profile_seeded() -> bool:
     return profile_dir().is_dir()
 
 
+def seed_cookie_params(cookies: dict[str, str]) -> list[dict]:
+    params = []
+    for name, value in cookies.items():
+        if name.startswith("__Host-"):
+            params.append({"name": name, "value": value, "url": MFP_URL})
+        else:
+            params.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "domain": ".myfitnesspal.com",
+                    "path": "/",
+                    "secure": True,
+                }
+            )
+    return params
+
+
 def _visit_and_harvest(seed_cookies: dict[str, str] | None) -> dict[str, str]:
     from playwright.sync_api import sync_playwright
 
@@ -32,18 +50,7 @@ def _visit_and_harvest(seed_cookies: dict[str, str] | None) -> dict[str, str]:
         )
         try:
             if seed_cookies:
-                context.add_cookies(
-                    [
-                        {
-                            "name": name,
-                            "value": value,
-                            "domain": ".myfitnesspal.com",
-                            "path": "/",
-                            "secure": True,
-                        }
-                        for name, value in seed_cookies.items()
-                    ]
-                )
+                context.add_cookies(seed_cookie_params(seed_cookies))
             page = context.pages[0]
             page.goto(MFP_URL, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(SETTLE_MS)

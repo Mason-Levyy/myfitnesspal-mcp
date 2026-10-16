@@ -94,3 +94,15 @@ def test_failed_refresh_does_not_block_later_ones(seeded_browser, monkeypatch):
     monkeypatch.setattr(refresh, "_visit_and_harvest", lambda seed: harvested)
     refresh.refresh_session()
     assert seeded_browser == [harvested]
+
+
+def test_seed_cookies_pin_host_prefixed_cookies_to_the_host():
+    params = refresh.seed_cookie_params(
+        {"__Secure-next-auth.session-token": "tok", "__Host-next-auth.csrf-token": "c"}
+    )
+    assert params[0]["domain"] == ".myfitnesspal.com"
+    assert params[1] == {
+        "name": "__Host-next-auth.csrf-token",
+        "value": "c",
+        "url": refresh.MFP_URL,
+    }
