@@ -52,9 +52,6 @@ def parse_range(
 
 
 async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
-    """Runs a blocking MFP operation; on an auth-shaped failure, notifies the
-    client, refreshes the session (headless browser profile when available,
-    otherwise re-reads MFP_COOKIE / cookies.json), and retries once."""
     try:
         return await asyncio.to_thread(op)
     except Exception as exc:
@@ -76,8 +73,8 @@ async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
 
 
 async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
-    """Runs `op` against the store and a live MFP client, re-resolving both on
-    the retry so a refreshed session is picked up."""
+    """Resolves the client inside the retried call so a refreshed session is
+    picked up."""
     return await run_with_refresh(ctx, lambda: op(get_store(), mfp_client.get_client()))
 
 

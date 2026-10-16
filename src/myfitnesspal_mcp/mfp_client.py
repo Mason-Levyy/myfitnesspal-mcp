@@ -38,9 +38,7 @@ def is_auth_error(exc: Exception) -> bool:
 
 
 class CurlCffiClient(myfitnesspal.Client):
-    """myfitnesspal.Client over a curl_cffi browser-impersonating session.
-
-    MyFitnessPal sits behind Cloudflare, which fingerprints the upstream
+    """MyFitnessPal sits behind Cloudflare, which fingerprints the upstream
     cloudscraper transport as a bot and 403s even with valid cookies. A real
     Chrome TLS/JA3 fingerprint passes with just the NextAuth session cookie.
     """

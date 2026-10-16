@@ -169,9 +169,6 @@ class AmbiguousEntry(DiaryLookupError):
 
 
 def _interchangeable(entries: list[dict]) -> bool:
-    # MFP's entry name carries the quantity ("Egg, 1 egg" vs "Egg, 2 egg",
-    # verified 2026-10-16 against a real account), so same-named entries in
-    # one meal are true duplicates.
     def without_entry_id(entry: dict) -> dict:
         return {key: value for key, value in entry.items() if key != "entry_id"}
 
