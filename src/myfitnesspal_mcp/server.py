@@ -5,7 +5,18 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from . import diary, food_logging, mfp_client, refresh, sync
+from . import (
+    diary,
+    exercise,
+    food_logging,
+    food_search,
+    measurements,
+    mfp_client,
+    notes,
+    refresh,
+    sync,
+    water,
+)
 from .food_ranking import MacroTargets
 from .store import Store, trend_column
 
@@ -116,7 +127,7 @@ async def fitness_search_food(
     def op(store, client):
         return {
             "query": query,
-            "results": diary.search_food(client, query, limit, with_macros),
+            "results": food_search.search_food(client, query, limit, with_macros),
         }
 
     return await with_session(ctx, op)
@@ -367,7 +378,7 @@ async def fitness_log_weight(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.set_weight(client, day, weight)
+        result = measurements.set_weight(client, day, weight)
         store.upsert_nutrition(day.isoformat(), weight=result["weight"])
         return {"ok": True, **result}
 
@@ -395,7 +406,7 @@ async def fitness_log_water(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.log_water(client, day, amount, unit, replace=replace)
+        result = water.log_water(client, day, amount, unit, replace=replace)
         store.upsert_nutrition(day.isoformat(), water_ml=result["water_ml"])
         return {"ok": True, **result}
 
@@ -411,7 +422,7 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
     day = parse_day(date)
 
     def op(store, client):
-        return diary.get_exercise(client, day)
+        return exercise.get_exercise(client, day)
 
     return await with_session(ctx, op)
 
@@ -430,8 +441,8 @@ async def fitness_get_exercise_entries(
     day = parse_day(date)
 
     def op(store, client):
-        doc, _ = diary.exercise_page(client, day)
-        return {"day": day.isoformat(), "entries": diary.exercise_entries(doc)}
+        doc, _ = exercise.exercise_page(client, day)
+        return {"day": day.isoformat(), "entries": exercise.exercise_entries(doc)}
 
     return await with_session(ctx, op)
 
@@ -459,7 +470,7 @@ async def fitness_delete_exercise(
     day = parse_day(date)
 
     def op(store, client):
-        return diary.delete_exercise(client, day, query, all_matches=all_matches)
+        return exercise.delete_exercise(client, day, query, all_matches=all_matches)
 
     return await with_session(ctx, op)
 
@@ -474,7 +485,7 @@ async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict
     day = parse_day(date)
 
     def op(store, client):
-        body = diary.get_note(client, day)
+        body = notes.get_note(client, day)
         store.set_note(day.isoformat(), body)
         return {"day": day.isoformat(), "note": body}
 
@@ -495,7 +506,7 @@ async def fitness_log_note(
     day = parse_day(date)
 
     def op(store, client):
-        result = diary.push_note(client, day, text, append=append)
+        result = notes.push_note(client, day, text, append=append)
         store.set_note(day.isoformat(), result["note"])
         return {"ok": True, **result}
 
