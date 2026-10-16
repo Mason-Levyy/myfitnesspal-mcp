@@ -4,6 +4,8 @@ from datetime import date
 from . import diary, food_search
 from .food_ranking import MacroTargets, normalize_query, rank_candidates
 
+DEFAULT_MEAL = "breakfast"
+
 
 class DraftNotFound(RuntimeError):
     pass
@@ -122,7 +124,7 @@ def draft_food(
     query: str,
     day: date,
     *,
-    meal: str = "breakfast",
+    meal: str = DEFAULT_MEAL,
     quantity: float = 1.0,
     targets: MacroTargets | None = None,
     limit: int = 10,
