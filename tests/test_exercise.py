@@ -132,6 +132,12 @@ def test_delete_exercise_no_match_lists_logged_entries(exercise_client, all_matc
     assert _posts(exercise_client) == []
 
 
+def test_identical_exercise_rows_resolve_to_one():
+    row = {"section": "cardiovascular", "name": "Walking", "minutes": 30.0}
+    entries = [{"entry_id": "1", **row}, {"entry_id": "2", **row}]
+    assert diary.resolve_entry(entries, "walking", None, TODAY)["entry_id"] == "1"
+
+
 def test_delete_exercise_is_case_insensitive(exercise_client):
     result = diary.delete_exercise(exercise_client, TODAY, "PULL UP")
     assert result["removed"][0]["entry_id"] == "555"

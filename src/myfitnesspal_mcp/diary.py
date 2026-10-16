@@ -397,13 +397,23 @@ class AmbiguousEntry(DiaryLookupError):
         )
 
 
+def _interchangeable(entries: list[dict]) -> bool:
+    # MFP's entry name carries the quantity ("Egg, 1 egg" vs "Egg, 2 egg",
+    # verified 2026-10-16 against a real account), so same-named entries in
+    # one meal are true duplicates.
+    def without_entry_id(entry: dict) -> dict:
+        return {key: value for key, value in entry.items() if key != "entry_id"}
+
+    first = without_entry_id(entries[0])
+    return all(without_entry_id(entry) == first for entry in entries[1:])
+
+
 def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) -> dict:
     candidates = find_entries(entries, query, meal)
     exact = [c for c in candidates if c["name"].lower() == query.lower()]
-    if len(exact) == 1:
-        return exact[0]
-    if len(candidates) == 1:
-        return candidates[0]
+    for pool in (exact, candidates):
+        if pool and _interchangeable(pool):
+            return pool[0]
     if candidates:
         raise AmbiguousEntry(query, meal, day, candidates)
     raise no_matching_entry(entries, query, meal, day)
