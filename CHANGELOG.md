@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `auth` no longer fails to seed the auto-refresh browser profile when the
+  pasted Cookie header includes a `__Host-` cookie (such as
+  `__Host-next-auth.csrf-token`). Chrome rejects a `__Host-` cookie that has a
+  Domain, and one rejected cookie failed the whole batch with "Invalid cookie
+  fields".
+
 ## [0.4.1] - 2026-09-30
 
 ### Added
