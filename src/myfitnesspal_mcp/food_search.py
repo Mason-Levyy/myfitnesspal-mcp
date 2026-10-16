@@ -1,6 +1,9 @@
+import logging
 from urllib import parse
 
 from .mfp_web import get_document, site_url
+
+logger = logging.getLogger(__name__)
 
 
 def _result_extras(anchor) -> dict:
@@ -103,7 +106,8 @@ def food_details(client, external_id: str | None) -> dict | None:
             },
             "serving_sizes": details.get("serving_sizes") or [],
         }
-    except Exception:
+    except Exception as exc:
+        logger.debug("no details for food %s, using search data: %s", external_id, exc)
         return None
 
 

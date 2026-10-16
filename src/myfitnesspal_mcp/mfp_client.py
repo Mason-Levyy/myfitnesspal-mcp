@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from http.cookiejar import Cookie, CookieJar
@@ -7,6 +8,8 @@ from curl_cffi import requests as cffi_requests
 from myfitnesspal.exceptions import MyfitnesspalLoginError
 
 from . import auth, config, diary
+
+logger = logging.getLogger(__name__)
 
 RECONNECT_HINT = (
     "MyFitnessPal session expired or not connected. "
@@ -67,8 +70,8 @@ class CurlCffiClient(myfitnesspal.Client):
             meta = super()._get_user_metadata()
             if meta and meta.get("username"):
                 return meta
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("profile lookup failed, using the saved username: %s", exc)
         username = self._username_override or auth.saved_username()
         if not username:
             raise MyfitnesspalLoginError(
@@ -132,8 +135,6 @@ def get_client() -> CurlCffiClient:
         raise NotConnectedError(RECONNECT_HINT)
     try:
         _client = build_client(cookies)
-    except NotConnectedError:
-        raise
     except Exception as exc:
         raise NotConnectedError(f"{RECONNECT_HINT} (auth failed: {exc})") from exc
     return _client
