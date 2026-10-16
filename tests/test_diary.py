@@ -442,6 +442,62 @@ def test_resolve_entry_no_match_lists_what_is_actually_logged():
         diary.resolve_entry(entries, "beef", "dinner", TODAY)
 
 
+def _diary_with_breakfast_entries(*names: str) -> str:
+    rows = "".join(
+        f"<tr><td><a data-food-entry-id='d{position}'>{name}</a></td></tr>"
+        for position, name in enumerate(names, start=1)
+    )
+    return (
+        "<html><head><meta name='csrf-token' content='DIARYTOKEN'></head><body>"
+        f"<table><tr class='meal_header'><td>Breakfast</td></tr>{rows}"
+        "<tr class='meal_header'><td>Lunch</td></tr>"
+        "<tr class='bottom'><td>Totals</td></tr></table></body></html>"
+    )
+
+
+@pytest.mark.parametrize("query", ["egg", "Egg, 1 egg"])
+def test_delete_food_removes_one_of_identical_duplicates(client, make_response, query):
+    client.session.route(
+        "GET",
+        "food/diary?date=",
+        make_response(text=_diary_with_breakfast_entries("Egg, 1 egg", "Egg, 1 egg")),
+    )
+    result = diary.delete_food(client, TODAY, query, meal="breakfast")
+    assert result == {"removed": "Egg, 1 egg", "meal": "breakfast"}
+    removals = [url for _, url, _ in client.session.calls if "food/remove" in url]
+    assert len(removals) == 1
+    assert removals[0].endswith("food/remove/d1")
+
+
+def test_same_food_at_different_quantities_stays_ambiguous(client, make_response):
+    client.session.route(
+        "GET",
+        "food/diary?date=",
+        make_response(text=_diary_with_breakfast_entries("Egg, 1 egg", "Egg, 2 egg")),
+    )
+    with pytest.raises(diary.AmbiguousEntry, match="Egg, 2 egg"):
+        diary.delete_food(client, TODAY, "egg", meal="breakfast")
+    assert not any("food/remove" in url for _, url, _ in client.session.calls)
+
+
+def test_identical_names_in_different_meals_stay_ambiguous():
+    entries = [
+        {"entry_id": "1", "meal": "breakfast", "name": "Egg, 1 egg"},
+        {"entry_id": "2", "meal": "lunch", "name": "Egg, 1 egg"},
+    ]
+    with pytest.raises(diary.AmbiguousEntry):
+        diary.resolve_entry(entries, "egg", None, TODAY)
+
+
+def test_identical_exact_matches_win_over_other_substring_matches():
+    entries = [
+        {"entry_id": "1", "meal": "breakfast", "name": "Egg"},
+        {"entry_id": "2", "meal": "breakfast", "name": "Egg"},
+        {"entry_id": "3", "meal": "breakfast", "name": "Egg Salad"},
+    ]
+    assert diary.resolve_entry(entries, "egg", "breakfast", TODAY)["entry_id"] == "1"
+
+
 def test_delete_food_removes_match(client):
     result = diary.delete_food(client, TODAY, "coffee")
     assert result == {"removed": "Coffee, 1 cup", "meal": "breakfast"}

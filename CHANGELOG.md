@@ -13,6 +13,13 @@ All notable changes to this project are documented here. The format follows
   `__Host-next-auth.csrf-token`). Chrome rejects a `__Host-` cookie that has a
   Domain, and one rejected cookie failed the whole batch with "Invalid cookie
   fields".
+- `fitness_delete_food` and `fitness_modify_food` can now remove one of two
+  identical diary entries, such as the same food logged twice to one meal.
+  Previously no query could tell them apart, so the call always failed with
+  "matches multiple diary entries". Entries count as identical only when they
+  share a name and meal. MFP's entry name includes the quantity, so the same
+  food at different quantities still asks you to pick one. `fitness_delete_exercise` does the
+  same for identical exercise rows. (#30)
 
 ## [0.4.1] - 2026-09-30
 

@@ -289,7 +289,9 @@ async def fitness_delete_food(
     matches nothing, the error lists what's actually logged that day/meal — use
     that to retry with a better query. If it matches more than one entry (and
     none is an exact name match), the error lists the candidates; narrow `query`
-    to pick one.
+    to pick one. Identical duplicates (same name, including its quantity, in
+    the same meal) are interchangeable, so one of them is removed; call again
+    to remove another.
     meal: optional breakfast|lunch|dinner|snacks or any meal name on the
     account, to disambiguate duplicates. date: YYYY-MM-DD (default: today).
     """
@@ -320,7 +322,7 @@ async def fitness_modify_food(
     matches nothing, the error lists what's actually logged that day/meal — use
     that to retry with a better query. If it matches more than one entry (and
     none is an exact name match), the error lists the candidates; narrow `query`
-    to pick one.
+    to pick one. Of several identical duplicates, one is replaced.
     new_query: the food to add instead; omit to re-add `query` (e.g. to change
     quantity). The replacement is chosen like fitness_log_food's: a pinned
     food or a single exact-name match is used directly; otherwise nothing is
@@ -446,7 +448,8 @@ async def fitness_delete_exercise(
     query: text matched against logged exercise names. By default deletes
     exactly one entry, like fitness_delete_food: an exact name match wins;
     otherwise several matches raise an error listing the candidates, and no
-    match raises an error listing what's actually logged.
+    match raises an error listing what's actually logged. Of several identical
+    rows (same name and columns), one is removed.
     all_matches: delete every entry whose name contains `query` — for
     cleaning up syncs that log one workout as several same-named rows
     (e.g. Garmin's "Aerobics, general"). Check fitness_get_exercise_entries
