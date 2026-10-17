@@ -21,11 +21,10 @@ def site_url(
     return f"{url}?{parse.urlencode(query, safe='/', quote_via=parse.quote)}"
 
 
+# MFP has no write API, so these replicate what the web app's own JavaScript
+# sends: writes authenticate with the session's Bearer token plus the mfp-*
+# client headers, and form posts add the page csrf token (form_headers).
 def api_headers(client, extra: dict | None = None) -> dict:
-    """MFP has no write API; these replicate what the web app's own JavaScript
-    sends. Writes authenticate with the session's Bearer token plus these
-    mfp-* client headers, and form posts add the page csrf token
-    (form_headers)."""
     headers = {
         "Authorization": f"Bearer {client.access_token}",
         "mfp-client-id": "mfp-main-js",
