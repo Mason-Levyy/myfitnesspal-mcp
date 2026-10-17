@@ -1,5 +1,4 @@
 import logging
-from urllib import parse
 
 from .mfp_web import get_document, site_url
 
@@ -36,7 +35,7 @@ def search_results(client, query: str) -> list[dict]:
     """MFP's legacy search page, because its food_id + weight_id are the ids
     /food/add accepts; v2 API ids are rejected."""
     doc = get_document(
-        client, site_url(client, f"food/search?search={parse.quote(query)}&page=1")
+        client, site_url(client, "food/search", params={"search": query, "page": 1})
     )
     results = []
     for anchor in doc.xpath("//a[@data-original-id and @data-weight-ids]"):

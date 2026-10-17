@@ -2,6 +2,12 @@ from datetime import date
 
 from lxml import html as lh
 
+from .entry_matching import (
+    DiaryLookupError,
+    collapse_whitespace,
+    normalize_meal,
+    resolve_entry,
+)
 from .mfp_web import (
     form_headers,
     get_page,
@@ -10,24 +16,7 @@ from .mfp_web import (
     site_url,
 )
 
-MEAL_ALIASES = {"snack": "snacks"}
-
 DEFAULT_MEAL_POSITIONS = {"breakfast": 0, "lunch": 1, "dinner": 2, "snacks": 3}
-
-
-def _collapse_whitespace(text: str) -> str:
-    return " ".join(text.split())
-
-
-def _normalize_meal(meal: str | None) -> str | None:
-    if meal is None:
-        return None
-    lowered = _collapse_whitespace(meal).lower()
-    return MEAL_ALIASES.get(lowered, lowered)
-
-
-class DiaryLookupError(RuntimeError):
-    pass
 
 
 class UnknownMeal(DiaryLookupError):
@@ -44,7 +33,7 @@ def _is_meal_header(row) -> bool:
 
 def _header_label(header_row, position: int) -> str:
     cells = header_row.xpath("./td")
-    name = _collapse_whitespace(cells[0].text_content()) if cells else ""
+    name = collapse_whitespace(cells[0].text_content()) if cells else ""
     return name or f"Meal {position + 1}"
 
 
@@ -55,14 +44,14 @@ def meal_headers(doc) -> list[str]:
 
 def resolve_meal(doc, meal: str) -> tuple[str, str]:
     headers = meal_headers(doc)
-    target = _normalize_meal(meal)
+    target = normalize_meal(meal)
     for position, header in enumerate(headers):
-        if _normalize_meal(header) == target:
+        if normalize_meal(header) == target:
             return str(position), header
     default_position = DEFAULT_MEAL_POSITIONS.get(target)
     if default_position is not None and default_position < len(headers):
         header_at_default = headers[default_position]
-        if _normalize_meal(header_at_default) not in DEFAULT_MEAL_POSITIONS:
+        if normalize_meal(header_at_default) not in DEFAULT_MEAL_POSITIONS:
             return str(default_position), header_at_default
     raise UnknownMeal(
         f"no MyFitnessPal meal named {meal!r}. Configured meals: " + ", ".join(headers)
@@ -119,7 +108,7 @@ def diary_entries(doc) -> list[dict]:
     for row in doc.xpath("//tr"):
         if _is_meal_header(row):
             meal_position += 1
-            current_meal = _normalize_meal(_header_label(row, meal_position))
+            current_meal = normalize_meal(_header_label(row, meal_position))
             continue
         anchors = row.xpath(".//a[@data-food-entry-id]")
         if anchors:
@@ -133,72 +122,6 @@ def diary_entries(doc) -> list[dict]:
     return entries
 
 
-def _meal_pool(entries: list[dict], meal: str | None) -> list[dict]:
-    target = _normalize_meal(meal)
-    return entries if target is None else [e for e in entries if e["meal"] == target]
-
-
-def find_entries(
-    entries: list[dict], query: str, meal: str | None = None
-) -> list[dict]:
-    needle = query.lower()
-    return [e for e in _meal_pool(entries, meal) if needle in e["name"].lower()]
-
-
-class NoMatchingEntry(DiaryLookupError):
-    pass
-
-
-class AmbiguousEntry(DiaryLookupError):
-    def __init__(
-        self,
-        query: str,
-        meal: str | None,
-        day: date,
-        candidates: list[dict],
-        *,
-        advice: str = "Use a more specific query to pick one.",
-    ):
-        self.candidates = candidates
-        where = f" in {meal}" if meal else ""
-        options = "; ".join(f"{c['name']!r}" for c in candidates)
-        super().__init__(
-            f"'{query}'{where} on {day.isoformat()} matches multiple diary entries: "
-            f"{options}. {advice}"
-        )
-
-
-def _interchangeable(entries: list[dict]) -> bool:
-    def without_entry_id(entry: dict) -> dict:
-        return {key: value for key, value in entry.items() if key != "entry_id"}
-
-    first = without_entry_id(entries[0])
-    return all(without_entry_id(entry) == first for entry in entries[1:])
-
-
-def resolve_entry(entries: list[dict], query: str, meal: str | None, day: date) -> dict:
-    candidates = find_entries(entries, query, meal)
-    exact = [c for c in candidates if c["name"].lower() == query.lower()]
-    for pool in (exact, candidates):
-        if pool and _interchangeable(pool):
-            return pool[0]
-    if candidates:
-        raise AmbiguousEntry(query, meal, day, candidates)
-    raise no_matching_entry(entries, query, meal, day)
-
-
-def no_matching_entry(
-    entries: list[dict], query: str, meal: str | None, day: date
-) -> NoMatchingEntry:
-    where = f" in {meal}" if meal else ""
-    pool = _meal_pool(entries, meal)
-    logged = "; ".join(f"{e['name']!r}" for e in pool) if pool else "(nothing logged)"
-    return NoMatchingEntry(
-        f"no diary entry matching '{query}'{where} on {day.isoformat()}. "
-        f"Entries actually logged{where}: {logged}"
-    )
-
-
 def delete_food(
     client,
     day: date,
@@ -208,7 +131,7 @@ def delete_food(
     page: tuple | None = None,
 ) -> dict:
     doc, token = page or diary_page(client, day)
-    label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
+    label = normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
     entry = resolve_entry(diary_entries(doc), query, label, day)
     post_legacy_delete(
         client,
