@@ -7,11 +7,18 @@ ORIGIN = "https://www.myfitnesspal.com"
 FORM_CONTENT_TYPE = "application/x-www-form-urlencoded; charset=UTF-8"
 
 
-def site_url(client, path: str, day: date | None = None) -> str:
+def site_url(
+    client, path: str, day: date | None = None, *, params: dict | None = None
+) -> str:
     url = parse.urljoin(client.BASE_URL_SECURE, path)
-    if day is None:
+    query = dict(params or {})
+    if day is not None:
+        query["date"] = day.isoformat()
+    if not query:
         return url
-    return f"{url}?date={day.isoformat()}"
+    # Encoded exactly as the hand-built search URL always was (%20, bare "/"):
+    # urlencode's default "+" for spaces hasn't been tried against MFP.
+    return f"{url}?{parse.urlencode(query, safe='/', quote_via=parse.quote)}"
 
 
 def api_headers(client, extra: dict | None = None) -> dict:
