@@ -13,6 +13,17 @@ from urllib import parse
 
 from lxml import html as lh
 
+from .mfp_web import (
+    api_headers,
+    form_headers,
+    get_document,
+    get_json,
+    get_page,
+    post_legacy_delete,
+    require_status,
+    site_url,
+)
+
 MEAL_ALIASES = {"snack": "snacks"}
 
 DEFAULT_MEAL_POSITIONS = {"breakfast": 0, "lunch": 1, "dinner": 2, "snacks": 3}
@@ -72,18 +83,6 @@ def resolve_meal(doc, meal: str) -> tuple[str, str]:
     )
 
 
-def api_headers(client, extra: dict | None = None) -> dict:
-    headers = {
-        "Authorization": f"Bearer {client.access_token}",
-        "mfp-client-id": "mfp-main-js",
-        "mfp-user-id": str(client.user_id),
-        "X-Requested-With": "XMLHttpRequest",
-    }
-    if extra:
-        headers.update(extra)
-    return headers
-
-
 def _result_extras(anchor) -> dict:
     extras = {
         "external_id": anchor.get("data-external-id"),
@@ -110,19 +109,12 @@ def _result_extras(anchor) -> dict:
     return extras
 
 
-def food_search(client, query: str):
-    """Returns (results, csrf_token) scraped from the legacy web search page.
-
-    Each result: {food_id, weight_id, name, external_id, brand, calories} —
-    food_id/weight_id feed /food/add; external_id feeds the v2 details API.
-    """
-    url = parse.urljoin(
-        client.BASE_URL_SECURE, f"food/search?search={parse.quote(query)}&page=1"
+def search_results(client, query: str) -> list[dict]:
+    """MFP's legacy search page, because its food_id + weight_id are the ids
+    /food/add accepts; v2 API ids are rejected."""
+    doc = get_document(
+        client, site_url(client, f"food/search?search={parse.quote(query)}&page=1")
     )
-    resp = client.session.get(url, headers=api_headers(client))
-    resp.raise_for_status()
-    doc = lh.fromstring(resp.text)
-    csrf = doc.xpath("//meta[@name='csrf-token']/@content")
     results = []
     for anchor in doc.xpath("//a[@data-original-id and @data-weight-ids]"):
         weight_ids = [w for w in anchor.get("data-weight-ids").split(",") if w]
@@ -136,9 +128,7 @@ def food_search(client, query: str):
         }
         result.update(_result_extras(anchor))
         results.append(result)
-    if csrf:
-        return results, csrf[0]
-    return results, None
+    return results
 
 
 def serving_label(serving: dict) -> str | None:
@@ -198,12 +188,12 @@ def food_details(client, external_id: str | None) -> dict | None:
 
 
 def food_candidates(
-    client, query: str, limit: int = 10, search_results: list[dict] | None = None
+    client, query: str, limit: int = 10, results: list[dict] | None = None
 ) -> list[dict]:
-    if search_results is None:
-        search_results, _ = food_search(client, query)
+    if results is None:
+        results = search_results(client, query)
     candidates = []
-    for search_rank, result in enumerate(search_results[:limit]):
+    for search_rank, result in enumerate(results[:limit]):
         candidate = {
             "food_id": result["food_id"],
             "name": result["name"],
@@ -237,9 +227,8 @@ def food_candidates(
 def search_food(
     client, query: str, limit: int = 5, with_macros: bool = True
 ) -> list[dict]:
-    results, _ = food_search(client, query)
     candidates = []
-    for result in results[:limit]:
+    for result in search_results(client, query)[:limit]:
         candidate = {
             "name": result["name"],
             "brand": result["brand"],
@@ -262,34 +251,6 @@ def search_food(
     return candidates
 
 
-def add_food_to_diary(
-    client, food_id, weight_id, csrf, meal_id: str, day: date, quantity
-):
-    resp = client.session.post(
-        parse.urljoin(client.BASE_URL_SECURE, "food/add"),
-        data={
-            "food_entry[food_id]": str(food_id),
-            "food_entry[date]": day.isoformat(),
-            "food_entry[quantity]": str(quantity),
-            "food_entry[weight_id]": str(weight_id),
-            "food_entry[meal_id]": meal_id,
-            "ajax": "true",
-        },
-        headers=api_headers(
-            client,
-            {
-                "Accept": "application/json",
-                "X-CSRF-Token": csrf,
-                "Origin": "https://www.myfitnesspal.com",
-                "Referer": parse.urljoin(client.BASE_URL_SECURE, "food/search"),
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            },
-        ),
-    )
-    if resp.status_code not in (200, 204):
-        raise RuntimeError(f"MyFitnessPal /food/add returned HTTP {resp.status_code}")
-
-
 def push_food(
     client,
     day: date,
@@ -301,29 +262,35 @@ def push_food(
 ) -> None:
     doc, csrf = page or diary_page(client, day)
     meal_id, _ = resolve_meal(doc, meal)
-    add_food_to_diary(client, food_id, weight_id, csrf, meal_id, day, quantity)
+    resp = client.session.post(
+        site_url(client, "food/add"),
+        data={
+            "food_entry[food_id]": str(food_id),
+            "food_entry[date]": day.isoformat(),
+            "food_entry[quantity]": str(quantity),
+            "food_entry[weight_id]": str(weight_id),
+            "food_entry[meal_id]": meal_id,
+            "ajax": "true",
+        },
+        headers=form_headers(
+            client, csrf, site_url(client, "food/search"), accept="application/json"
+        ),
+    )
+    require_status(resp, "/food/add", (200, 204))
 
 
 def food_diary_url(client, day: date | None = None) -> str:
-    url = parse.urljoin(client.BASE_URL_SECURE, "food/diary")
-    if day is None:
-        return url
-    return f"{url}?date={day.isoformat()}"
+    return site_url(client, "food/diary", day)
 
 
-def diary_page(client, day: date):
-    resp = client.session.get(food_diary_url(client, day), headers=api_headers(client))
-    resp.raise_for_status()
-    doc = lh.fromstring(resp.text)
-    tokens = doc.xpath("//meta[@name='csrf-token']/@content")
-    if not tokens:
-        raise RuntimeError("couldn't read the MyFitnessPal csrf token")
+def diary_page(client, day: date) -> tuple[lh.HtmlElement, str]:
+    doc, csrf = get_page(client, food_diary_url(client, day))
     if not meal_headers(doc):
         raise DiarySignedOut(
             "the MyFitnessPal diary page has no meal sections; the login "
             "session has likely expired"
         )
-    return doc, tokens[0]
+    return doc, csrf
 
 
 def diary_entries(doc) -> list[dict]:
@@ -357,22 +324,6 @@ def find_entries(
 ) -> list[dict]:
     needle = query.lower()
     return [e for e in _meal_pool(entries, meal) if needle in e["name"].lower()]
-
-
-def remove_entry(client, entry_id: str, token: str) -> None:
-    resp = client.session.post(
-        parse.urljoin(client.BASE_URL_SECURE, f"food/remove/{entry_id}"),
-        data={"_method": "delete", "authenticity_token": token},
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://www.myfitnesspal.com",
-            "Referer": food_diary_url(client),
-        },
-    )
-    if resp.status_code not in (200, 204):
-        raise RuntimeError(
-            f"MyFitnessPal /food/remove returned HTTP {resp.status_code}"
-        )
 
 
 class NoMatchingEntry(DiaryLookupError):
@@ -437,7 +388,13 @@ def delete_food(
     doc, token = page or diary_page(client, day)
     label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
     entry = resolve_entry(diary_entries(doc), query, label, day)
-    remove_entry(client, entry["entry_id"], token)
+    post_legacy_delete(
+        client,
+        "food/remove",
+        entry["entry_id"],
+        token,
+        referer=food_diary_url(client),
+    )
     return {"removed": entry["name"], "meal": entry["meal"]}
 
 
@@ -451,10 +408,7 @@ def set_weight(client, day: date, value: float) -> dict:
             client, {"Accept": "application/json", "Content-Type": "application/json"}
         ),
     )
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(
-            f"MyFitnessPal /v2/measurements returned HTTP {resp.status_code}"
-        )
+    require_status(resp, "/v2/measurements", (200, 201))
     item = resp.json()["items"][0]
     return {"day": item["date"], "weight": item["value"], "unit": item.get("unit")}
 
@@ -496,13 +450,8 @@ def normalize_water_unit(unit: str) -> str:
 
 
 def get_water_ml(client, day: date) -> float:
-    resp = client.session.get(
-        parse.urljoin(client.BASE_URL_SECURE, "food/water")
-        + f"?date={day.isoformat()}",
-        headers=api_headers(client, {"Accept": "application/json"}),
-    )
-    resp.raise_for_status()
-    return float(resp.json()["item"]["milliliters"])
+    body = get_json(client, site_url(client, "food/water", day))
+    return float(body["item"]["milliliters"])
 
 
 def log_water(
@@ -522,20 +471,11 @@ def log_water(
     water_ml = amount_ml if replace else previous_ml + amount_ml
     _, csrf = diary_page(client, day)
     resp = client.session.post(
-        parse.urljoin(client.BASE_URL_SECURE, "food/water"),
+        site_url(client, "food/water"),
         data={"milliliters": water_ml, "date": day.isoformat()},
-        headers=api_headers(
-            client,
-            {
-                "X-CSRF-Token": csrf,
-                "Origin": "https://www.myfitnesspal.com",
-                "Referer": food_diary_url(client),
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            },
-        ),
+        headers=form_headers(client, csrf, food_diary_url(client)),
     )
-    if resp.status_code not in (200, 201, 204):
-        raise RuntimeError(f"MyFitnessPal /food/water returned HTTP {resp.status_code}")
+    require_status(resp, "/food/water", (200, 201, 204))
     return {
         "day": day.isoformat(),
         "previous_ml": previous_ml,
@@ -550,15 +490,8 @@ def get_note(client, day: date) -> str | None:
     """Reads the day's free-text diary note (the 'Notes' box at the bottom of
     the food diary). MFP stores the body double-HTML-encoded; returns the
     decoded text, or None when the day has no note."""
-    url = (
-        parse.urljoin(client.BASE_URL_SECURE, "food/note") + f"?date={day.isoformat()}"
-    )
-    resp = client.session.get(
-        url, headers=api_headers(client, {"Accept": "application/json"})
-    )
-    resp.raise_for_status()
-    item = (resp.json() or {}).get("item") or {}
-    body = item.get("body")
+    response = get_json(client, site_url(client, "food/note", day)) or {}
+    body = (response.get("item") or {}).get("body")
     if not body:
         return None
     return unescape(unescape(body)) or None
@@ -569,21 +502,11 @@ def set_note(client, day: date, body: str) -> dict:
     web app's Save Note request: a form POST with the page csrf token."""
     _, csrf = diary_page(client, day)
     resp = client.session.post(
-        parse.urljoin(client.BASE_URL_SECURE, "food/note"),
+        site_url(client, "food/note"),
         data={"body": body, "date": day.isoformat()},
-        headers=api_headers(
-            client,
-            {
-                "Accept": "*/*",
-                "X-CSRF-Token": csrf,
-                "Origin": "https://www.myfitnesspal.com",
-                "Referer": food_diary_url(client),
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            },
-        ),
+        headers=form_headers(client, csrf, food_diary_url(client), accept="*/*"),
     )
-    if resp.status_code not in (200, 201, 204):
-        raise RuntimeError(f"MyFitnessPal /food/note returned HTTP {resp.status_code}")
+    require_status(resp, "/food/note", (200, 201, 204))
     return {"day": day.isoformat(), "note": body}
 
 
@@ -604,18 +527,12 @@ def get_exercise(client, day: date) -> dict:
     return {"day": day.isoformat(), "exercise": sections}
 
 
-def exercise_page(client, day: date):
-    url = parse.urljoin(
-        client.BASE_URL_SECURE,
-        f"exercise/diary/{client.effective_username}?date={day.isoformat()}",
-    )
-    resp = client.session.get(url, headers=api_headers(client))
-    resp.raise_for_status()
-    doc = lh.fromstring(resp.text)
-    tokens = doc.xpath("//meta[@name='csrf-token']/@content")
-    if not tokens:
-        raise RuntimeError("couldn't read the MyFitnessPal csrf token")
-    return doc, tokens[0]
+def _exercise_diary_url(client, day: date | None = None) -> str:
+    return site_url(client, f"exercise/diary/{client.effective_username}", day)
+
+
+def exercise_page(client, day: date) -> tuple[lh.HtmlElement, str]:
+    return get_page(client, _exercise_diary_url(client, day))
 
 
 def _field_key(heading: str) -> str:
@@ -667,21 +584,13 @@ def exercise_entries(doc) -> list[dict]:
 
 
 def remove_exercise_entry(client, entry_id: str, token: str) -> None:
-    resp = client.session.post(
-        parse.urljoin(client.BASE_URL_SECURE, f"exercise/remove/{entry_id}"),
-        data={"_method": "delete", "authenticity_token": token},
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://www.myfitnesspal.com",
-            "Referer": parse.urljoin(
-                client.BASE_URL_SECURE, f"exercise/diary/{client.effective_username}"
-            ),
-        },
+    post_legacy_delete(
+        client,
+        "exercise/remove",
+        entry_id,
+        token,
+        referer=_exercise_diary_url(client),
     )
-    if resp.status_code not in (200, 204):
-        raise RuntimeError(
-            f"MyFitnessPal /exercise/remove returned HTTP {resp.status_code}"
-        )
 
 
 def delete_exercise(client, day: date, query: str, all_matches: bool = False) -> dict:

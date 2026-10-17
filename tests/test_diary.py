@@ -12,9 +12,8 @@ def meal_id(doc, meal):
     return diary.resolve_meal(doc, meal)[0]
 
 
-def test_food_search_parses_results_and_csrf(client):
-    results, csrf = diary.food_search(client, "banana")
-    assert csrf == "CSRF123"
+def test_search_results_parse_ids_and_listing(client):
+    results = diary.search_results(client, "banana")
     assert [r["food_id"] for r in results] == ["111", "222"]
     first = results[0]
     assert first["weight_id"] == "10"
@@ -24,8 +23,8 @@ def test_food_search_parses_results_and_csrf(client):
     assert first["calories"] == 105.0
 
 
-def test_food_search_degrades_without_external_id(client):
-    results, _ = diary.food_search(client, "banana")
+def test_search_results_degrade_without_external_id(client):
+    results = diary.search_results(client, "banana")
     second = results[1]
     assert second["external_id"] is None
     assert second["calories"] == 196.0
