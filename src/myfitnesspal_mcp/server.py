@@ -177,7 +177,14 @@ async def fitness_draft_food(
 
     def op(store, client):
         return food_logging.draft_food(
-            client, store, query, day, meal, quantity, targets, limit
+            client,
+            store,
+            query,
+            day,
+            meal=meal,
+            quantity=quantity,
+            targets=targets,
+            limit=limit,
         )
 
     return await with_session(ctx, op)
@@ -241,7 +248,7 @@ async def fitness_log_food(
                 food,
                 explicit_day or parse_day(None),
                 meal or "breakfast",
-                1.0 if quantity is None else quantity,
+                quantity=1.0 if quantity is None else quantity,
             )
             result = {**logged, "source": "ids"}
         elif query:
@@ -250,8 +257,8 @@ async def fitness_log_food(
                 store,
                 query,
                 explicit_day or parse_day(None),
-                meal or "breakfast",
-                1.0 if quantity is None else quantity,
+                meal=meal or "breakfast",
+                quantity=1.0 if quantity is None else quantity,
             )
         else:
             raise ValueError("pass draft_id + option, food_id + weight_id, or query")
@@ -351,9 +358,9 @@ async def fitness_modify_food(
             store,
             day,
             meal,
-            query,
-            new_query,
-            quantity,
+            query=query,
+            new_query=new_query,
+            quantity=quantity,
             draft_id=draft_id,
             option=option,
             serving=serving,

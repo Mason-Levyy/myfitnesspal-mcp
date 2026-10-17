@@ -87,6 +87,7 @@ def push_food(
     client,
     day: date,
     meal: str,
+    *,
     food_id: str,
     weight_id: str,
     quantity: float = 1.0,
@@ -155,6 +156,7 @@ class AmbiguousEntry(DiaryLookupError):
         meal: str | None,
         day: date,
         candidates: list[dict],
+        *,
         advice: str = "Use a more specific query to pick one.",
     ):
         self.candidates = candidates
@@ -201,7 +203,12 @@ def no_matching_entry(
 
 
 def delete_food(
-    client, day: date, query: str, meal: str | None = None, page: tuple | None = None
+    client,
+    day: date,
+    query: str,
+    meal: str | None = None,
+    *,
+    page: tuple | None = None,
 ) -> dict:
     doc, token = page or diary_page(client, day)
     label = _normalize_meal(resolve_meal(doc, meal)[1]) if meal else None
