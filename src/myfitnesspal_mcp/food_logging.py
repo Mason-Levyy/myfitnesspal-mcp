@@ -247,7 +247,7 @@ def _unambiguous_food(
             "source": "pin",
         }
         return food, None
-    search_results, _ = diary.food_search(client, query)
+    search_results = diary.search_results(client, query)
     wanted_name = normalize_query(query)
     exact_by_food_id = {}
     for result in search_results[:BARE_QUERY_LIMIT]:
