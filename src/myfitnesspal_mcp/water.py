@@ -47,8 +47,8 @@ def get_water_ml(client, day: date) -> float:
 def log_water(
     client, day: date, amount: float, unit: str = "cup", *, replace: bool = False
 ) -> dict:
-    """Adds `amount` to the day's water total, or with replace=True sets the
-    total to `amount`. /food/water always takes the full daily total."""
+    """/food/water takes the day's full total, so adding reads the current
+    total first."""
     canonical_unit = normalize_water_unit(unit)
     if replace and amount < 0:
         raise ValueError("amount can't be negative")

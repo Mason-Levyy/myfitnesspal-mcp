@@ -5,7 +5,7 @@ from .mfp_web import api_headers, require_status
 
 
 def set_weight(client, day: date, value: float) -> dict:
-    """Value is in the account's display unit (kg or lbs) — the v2 API stores
+    """Value is in the account's display unit (kg or lbs): the v2 API stores
     and echoes whatever unit the account is configured with."""
     resp = client.session.post(
         parse.urljoin(client.BASE_API_URL, "v2/measurements"),
