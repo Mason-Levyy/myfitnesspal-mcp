@@ -6,9 +6,7 @@ from .mfp_web import form_headers, get_json, require_status, site_url
 
 
 def get_note(client, day: date) -> str | None:
-    """Reads the day's free-text diary note (the 'Notes' box at the bottom of
-    the food diary). MFP stores the body double-HTML-encoded; returns the
-    decoded text, or None when the day has no note."""
+    """MFP stores the body double-HTML-encoded."""
     response = get_json(client, site_url(client, "food/note", day)) or {}
     body = (response.get("item") or {}).get("body")
     if not body:
@@ -17,8 +15,6 @@ def get_note(client, day: date) -> str | None:
 
 
 def set_note(client, day: date, body: str) -> dict:
-    """Writes the day's diary note, replacing whatever was there. Mirrors the
-    web app's Save Note request: a form POST with the page csrf token."""
     _, csrf = diary_page(client, day)
     resp = client.session.post(
         site_url(client, "food/note"),
@@ -30,8 +26,6 @@ def set_note(client, day: date, body: str) -> dict:
 
 
 def push_note(client, day: date, text: str, append: bool = False) -> dict:
-    """Writes `text` as the day's diary note. With append=True, keeps the
-    existing note and adds `text` on a new line."""
     if append:
         existing = get_note(client, day)
         if existing:
