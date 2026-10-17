@@ -79,6 +79,7 @@ def _build_draft(
     store,
     query: str,
     day: date,
+    *,
     meal: str,
     quantity: float,
     targets: MacroTargets,
@@ -120,13 +121,21 @@ def draft_food(
     store,
     query: str,
     day: date,
+    *,
     meal: str = "breakfast",
     quantity: float = 1.0,
     targets: MacroTargets | None = None,
     limit: int = 10,
 ) -> dict:
     draft_id, body = _build_draft(
-        client, store, query, day, meal, quantity, targets or MacroTargets(), limit
+        client,
+        store,
+        query,
+        day,
+        meal=meal,
+        quantity=quantity,
+        targets=targets or MacroTargets(),
+        limit=limit,
     )
     return _draft_view(draft_id, body)
 
@@ -153,11 +162,18 @@ def log_exact(
     food: dict,
     day: date,
     meal: str,
+    *,
     quantity: float,
     page: tuple | None = None,
 ) -> dict:
     diary.push_food(
-        client, day, meal, food["food_id"], food["weight_id"], quantity, page
+        client,
+        day,
+        meal,
+        food_id=food["food_id"],
+        weight_id=food["weight_id"],
+        quantity=quantity,
+        page=page,
     )
     return {
         "logged": food["name"],
@@ -175,9 +191,10 @@ def _log_option(
     option: dict,
     serving: int | None,
     day: date,
+    *,
     meal: str,
     quantity: float,
-    page: tuple | None = None,
+    page: tuple | None,
 ) -> dict:
     weight_id, label = _chosen_serving(option, serving)
     food = {
@@ -186,7 +203,7 @@ def _log_option(
         "name": option["name"],
         "serving": label,
     }
-    return log_exact(client, food, day, meal, quantity, page)
+    return log_exact(client, food, day, meal, quantity=quantity, page=page)
 
 
 def log_from_draft(
@@ -194,6 +211,7 @@ def log_from_draft(
     store,
     draft_id: str,
     option: int,
+    *,
     serving: int | None = None,
     quantity: float | None = None,
     meal: str | None = None,
@@ -216,9 +234,9 @@ def log_from_draft(
         chosen,
         serving,
         day or date.fromisoformat(body["day"]),
-        meal or body["meal"],
-        body["quantity"] if quantity is None else quantity,
-        page,
+        meal=meal or body["meal"],
+        quantity=body["quantity"] if quantity is None else quantity,
+        page=page,
     )
     if pin:
         store.set_pin(
@@ -267,22 +285,22 @@ def _unambiguous_food(
 
 
 def log_by_query(
-    client, store, query: str, day: date, meal: str, quantity: float
+    client, store, query: str, day: date, *, meal: str, quantity: float
 ) -> dict:
     food, search_results = _unambiguous_food(client, store, query)
     if food:
-        result = log_exact(client, food, day, meal, quantity)
+        result = log_exact(client, food, day, meal, quantity=quantity)
         return {**result, "source": food["source"]}
     draft_id, body = _build_draft(
         client,
         store,
         query,
         day,
-        meal,
-        quantity,
-        MacroTargets(),
-        BARE_QUERY_LIMIT,
-        search_results,
+        meal=meal,
+        quantity=quantity,
+        targets=MacroTargets(),
+        limit=BARE_QUERY_LIMIT,
+        search_results=search_results,
     )
     return {"logged": None, "needs_choice": True, **_draft_view(draft_id, body)}
 
@@ -292,6 +310,7 @@ def modify_food(
     store,
     day: date,
     meal: str,
+    *,
     query: str,
     new_query: str | None = None,
     quantity: float | None = None,
@@ -305,7 +324,15 @@ def modify_food(
         page = diary.diary_page(client, day)
         removed = diary.delete_food(client, day, query, meal, page=page)
         added = log_from_draft(
-            client, store, draft_id, option, serving, quantity, meal, day, page=page
+            client,
+            store,
+            draft_id,
+            option,
+            serving=serving,
+            quantity=quantity,
+            meal=meal,
+            day=day,
+            page=page,
         )
         return {"removed": removed["removed"], **added}
     replacement_query = new_query or query
@@ -317,11 +344,11 @@ def modify_food(
             store,
             replacement_query,
             day,
-            meal,
-            chosen_quantity,
-            MacroTargets(),
-            BARE_QUERY_LIMIT,
-            search_results,
+            meal=meal,
+            quantity=chosen_quantity,
+            targets=MacroTargets(),
+            limit=BARE_QUERY_LIMIT,
+            search_results=search_results,
         )
         return {
             "removed": None,
@@ -335,5 +362,5 @@ def modify_food(
         }
     page = diary.diary_page(client, day)
     removed = diary.delete_food(client, day, query, meal, page=page)
-    added = log_exact(client, food, day, meal, chosen_quantity, page)
+    added = log_exact(client, food, day, meal, quantity=chosen_quantity, page=page)
     return {"removed": removed["removed"], **added, "source": food["source"]}
