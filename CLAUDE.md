@@ -44,7 +44,8 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   entries, adding and removing food), `food_search.py`, `measurements.py`,
   `water.py`, `notes.py`, and `exercise.py`. Each function takes the client
   first. Request plumbing they share (URLs, headers, csrf pages, status checks)
-  lives in `mfp_web.py`.
+  lives in `mfp_web.py`, and matching a query to logged entries, shared by
+  food and exercise deletes, lives in `entry_matching.py`.
 - `mfp_client.py` holds the `curl_cffi` client, the cached instance, and
   `is_auth_error`. `auth.py` captures and stores cookies, `refresh.py` renews
   the session in a headless browser, and `config.py` reads env vars and paths.
@@ -64,7 +65,7 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   decides whether a failure triggers a session refresh, and unrecognised
   exceptions fall through to a keyword regex over the message. Errors caused by
   user input, like an unknown meal or no matching entry, subclass
-  `diary.DiaryLookupError`. Their messages quote food names that can contain
+  `entry_matching.DiaryLookupError`. Their messages quote food names that can contain
   words like "session", so they must never reach that regex.
 - **A model reads the error messages, so make them actionable.** Say what was
   wrong and how to recover: list what's actually logged, which meals exist, or

@@ -3,7 +3,7 @@ import datetime
 import pytest
 from lxml import html as lh
 
-from myfitnesspal_mcp import diary, exercise
+from myfitnesspal_mcp import entry_matching, exercise
 
 TODAY = datetime.date(2026, 9, 10)
 
@@ -109,7 +109,7 @@ def test_delete_exercise_strength_entry(exercise_client):
 
 
 def test_delete_exercise_ambiguous_by_default(exercise_client):
-    with pytest.raises(diary.AmbiguousEntry, match="all_matches=True"):
+    with pytest.raises(entry_matching.AmbiguousEntry, match="all_matches=True"):
         exercise.delete_exercise(exercise_client, TODAY, "aerobics")
     assert _posts(exercise_client) == []
 
@@ -129,7 +129,7 @@ def test_delete_exercise_all_matches_removes_every_match(exercise_client):
 
 @pytest.mark.parametrize("all_matches", [False, True])
 def test_delete_exercise_no_match_lists_logged_entries(exercise_client, all_matches):
-    with pytest.raises(diary.NoMatchingEntry, match="Running \\(jogging\\)"):
+    with pytest.raises(entry_matching.NoMatchingEntry, match="Running \\(jogging\\)"):
         exercise.delete_exercise(
             exercise_client, TODAY, "swimming", all_matches=all_matches
         )
@@ -139,7 +139,9 @@ def test_delete_exercise_no_match_lists_logged_entries(exercise_client, all_matc
 def test_identical_exercise_rows_resolve_to_one():
     row = {"section": "cardiovascular", "name": "Walking", "minutes": 30.0}
     entries = [{"entry_id": "1", **row}, {"entry_id": "2", **row}]
-    assert diary.resolve_entry(entries, "walking", None, TODAY)["entry_id"] == "1"
+    assert (
+        entry_matching.resolve_entry(entries, "walking", None, TODAY)["entry_id"] == "1"
+    )
 
 
 def test_delete_exercise_is_case_insensitive(exercise_client):

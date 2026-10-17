@@ -7,13 +7,23 @@ ORIGIN = "https://www.myfitnesspal.com"
 FORM_CONTENT_TYPE = "application/x-www-form-urlencoded; charset=UTF-8"
 
 
-def site_url(client, path: str, day: date | None = None) -> str:
+def site_url(
+    client, path: str, day: date | None = None, *, params: dict | None = None
+) -> str:
     url = parse.urljoin(client.BASE_URL_SECURE, path)
-    if day is None:
+    query = dict(params or {})
+    if day is not None:
+        query["date"] = day.isoformat()
+    if not query:
         return url
-    return f"{url}?date={day.isoformat()}"
+    # Encoded exactly as the hand-built search URL always was (%20, bare "/"):
+    # urlencode's default "+" for spaces hasn't been tried against MFP.
+    return f"{url}?{parse.urlencode(query, safe='/', quote_via=parse.quote)}"
 
 
+# MFP has no write API, so these replicate what the web app's own JavaScript
+# sends: writes authenticate with the session's Bearer token plus the mfp-*
+# client headers, and form posts add the page csrf token (form_headers).
 def api_headers(client, extra: dict | None = None) -> dict:
     headers = {
         "Authorization": f"Bearer {client.access_token}",
@@ -59,7 +69,7 @@ def get_page(client, url: str) -> tuple[lh.HtmlElement, str]:
     return doc, tokens[0]
 
 
-def get_json(client, url: str):
+def get_json(client, url: str) -> dict | None:
     resp = client.session.get(
         url, headers=api_headers(client, {"Accept": "application/json"})
     )

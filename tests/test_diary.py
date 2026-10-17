@@ -3,7 +3,7 @@ import datetime
 import pytest
 from lxml import html as lh
 
-from myfitnesspal_mcp import diary, mfp_client
+from myfitnesspal_mcp import diary, entry_matching, mfp_client
 
 TODAY = datetime.date(2026, 7, 8)
 
@@ -228,7 +228,7 @@ def test_lookup_errors_quoting_auth_words_are_not_auth_errors():
     with pytest.raises(diary.UnknownMeal) as exc_info:
         diary.resolve_meal(doc, "traning")
     assert not mfp_client.is_auth_error(exc_info.value)
-    no_match = diary.NoMatchingEntry("no entry 'login cookie' in session")
+    no_match = entry_matching.NoMatchingEntry("no entry 'login cookie' in session")
     assert not mfp_client.is_auth_error(no_match)
 
 
@@ -275,26 +275,29 @@ def test_find_entries_scoped_by_meal():
         {"entry_id": "1", "meal": "breakfast", "name": "Banana"},
         {"entry_id": "2", "meal": "lunch", "name": "Banana Bread"},
     ]
-    assert [e["entry_id"] for e in diary.find_entries(entries, "banana")] == ["1", "2"]
-    assert [e["entry_id"] for e in diary.find_entries(entries, "banana", "lunch")] == [
-        "2"
+    assert [e["entry_id"] for e in entry_matching.find_entries(entries, "banana")] == [
+        "1",
+        "2",
     ]
-    assert diary.find_entries(entries, "kale") == []
+    assert [
+        e["entry_id"] for e in entry_matching.find_entries(entries, "banana", "lunch")
+    ] == ["2"]
+    assert entry_matching.find_entries(entries, "kale") == []
 
 
 def test_find_entries_accepts_singular_snack_alias():
     entries = [{"entry_id": "1", "meal": "snacks", "name": "Cherries"}]
     assert [
-        e["entry_id"] for e in diary.find_entries(entries, "cherries", "snack")
+        e["entry_id"] for e in entry_matching.find_entries(entries, "cherries", "snack")
     ] == ["1"]
     assert [
-        e["entry_id"] for e in diary.find_entries(entries, "cherries", "Snack")
+        e["entry_id"] for e in entry_matching.find_entries(entries, "cherries", "Snack")
     ] == ["1"]
 
 
 def test_resolve_entry_returns_single_substring_match():
     entries = [{"entry_id": "1", "meal": "breakfast", "name": "Banana"}]
-    entry = diary.resolve_entry(entries, "banana", None, TODAY)
+    entry = entry_matching.resolve_entry(entries, "banana", None, TODAY)
     assert entry["entry_id"] == "1"
 
 
@@ -303,7 +306,7 @@ def test_resolve_entry_exact_match_wins_over_substring():
         {"entry_id": "1", "meal": "breakfast", "name": "Banana"},
         {"entry_id": "2", "meal": "breakfast", "name": "Banana Bread"},
     ]
-    entry = diary.resolve_entry(entries, "Banana", None, TODAY)
+    entry = entry_matching.resolve_entry(entries, "Banana", None, TODAY)
     assert entry["entry_id"] == "1"
 
 
@@ -312,8 +315,8 @@ def test_resolve_entry_raises_ambiguous_when_no_exact_match():
         {"entry_id": "1", "meal": "dinner", "name": "Chicken Salad"},
         {"entry_id": "2", "meal": "dinner", "name": "Chicken Soup"},
     ]
-    with pytest.raises(diary.AmbiguousEntry) as exc_info:
-        diary.resolve_entry(entries, "chicken", None, TODAY)
+    with pytest.raises(entry_matching.AmbiguousEntry) as exc_info:
+        entry_matching.resolve_entry(entries, "chicken", None, TODAY)
     message = str(exc_info.value)
     assert "Chicken Salad" in message
     assert "Chicken Soup" in message
@@ -322,8 +325,8 @@ def test_resolve_entry_raises_ambiguous_when_no_exact_match():
 
 def test_resolve_entry_no_match_lists_what_is_actually_logged():
     entries = [{"entry_id": "1", "meal": "dinner", "name": "Rice"}]
-    with pytest.raises(diary.NoMatchingEntry, match="Rice"):
-        diary.resolve_entry(entries, "beef", "dinner", TODAY)
+    with pytest.raises(entry_matching.NoMatchingEntry, match="Rice"):
+        entry_matching.resolve_entry(entries, "beef", "dinner", TODAY)
 
 
 def _diary_with_breakfast_entries(*names: str) -> str:
@@ -359,7 +362,7 @@ def test_same_food_at_different_quantities_stays_ambiguous(client, make_response
         "food/diary?date=",
         make_response(text=_diary_with_breakfast_entries("Egg, 1 egg", "Egg, 2 egg")),
     )
-    with pytest.raises(diary.AmbiguousEntry, match="Egg, 2 egg"):
+    with pytest.raises(entry_matching.AmbiguousEntry, match="Egg, 2 egg"):
         diary.delete_food(client, TODAY, "egg", meal="breakfast")
     assert not any("food/remove" in url for _, url, _ in client.session.calls)
 
@@ -369,8 +372,8 @@ def test_identical_names_in_different_meals_stay_ambiguous():
         {"entry_id": "1", "meal": "breakfast", "name": "Egg, 1 egg"},
         {"entry_id": "2", "meal": "lunch", "name": "Egg, 1 egg"},
     ]
-    with pytest.raises(diary.AmbiguousEntry):
-        diary.resolve_entry(entries, "egg", None, TODAY)
+    with pytest.raises(entry_matching.AmbiguousEntry):
+        entry_matching.resolve_entry(entries, "egg", None, TODAY)
 
 
 def test_identical_exact_matches_win_over_other_substring_matches():
@@ -379,7 +382,10 @@ def test_identical_exact_matches_win_over_other_substring_matches():
         {"entry_id": "2", "meal": "breakfast", "name": "Egg"},
         {"entry_id": "3", "meal": "breakfast", "name": "Egg Salad"},
     ]
-    assert diary.resolve_entry(entries, "egg", "breakfast", TODAY)["entry_id"] == "1"
+    assert (
+        entry_matching.resolve_entry(entries, "egg", "breakfast", TODAY)["entry_id"]
+        == "1"
+    )
 
 
 def test_delete_food_removes_match(client):
@@ -392,5 +398,5 @@ def test_delete_food_removes_match(client):
 
 
 def test_delete_food_no_match(client):
-    with pytest.raises(diary.NoMatchingEntry, match="in dinner"):
+    with pytest.raises(entry_matching.NoMatchingEntry, match="in dinner"):
         diary.delete_food(client, TODAY, "coffee", meal="dinner")
