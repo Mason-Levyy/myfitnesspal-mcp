@@ -137,7 +137,7 @@ async def fitness_search_food(
 async def fitness_draft_food(
     query: str,
     quantity: float = 1.0,
-    meal: str = "breakfast",
+    meal: str = food_logging.DEFAULT_MEAL,
     date: str | None = None,
     min_calories: float | None = None,
     max_calories: float | None = None,
@@ -221,12 +221,15 @@ async def fitness_log_food(
     date: YYYY-MM-DD (default today).
     """
     explicit_day = parse_day(date) if date else None
+    day = explicit_day or parse_day(None)
+    chosen_meal = meal or food_logging.DEFAULT_MEAL
+    chosen_quantity = 1.0 if quantity is None else quantity
 
     def op(store, client):
         if draft_id is not None:
             if option is None:
                 raise ValueError("option is required with draft_id")
-            result = food_logging.log_from_draft(
+            return food_logging.log_from_draft(
                 client,
                 store,
                 draft_id,
@@ -237,32 +240,21 @@ async def fitness_log_food(
                 day=explicit_day,
                 pin=pin,
             )
-        elif food_id is not None and weight_id is not None:
+        if food_id is not None and weight_id is not None:
             food = {
                 "food_id": food_id,
                 "weight_id": weight_id,
                 "name": query or food_id,
             }
             logged = food_logging.log_exact(
-                client,
-                food,
-                explicit_day or parse_day(None),
-                meal or "breakfast",
-                quantity=1.0 if quantity is None else quantity,
+                client, food, day, chosen_meal, quantity=chosen_quantity
             )
-            result = {**logged, "source": "ids"}
-        elif query:
-            result = food_logging.log_by_query(
-                client,
-                store,
-                query,
-                explicit_day or parse_day(None),
-                meal=meal or "breakfast",
-                quantity=1.0 if quantity is None else quantity,
+            return {**logged, "source": "ids"}
+        if query:
+            return food_logging.log_by_query(
+                client, store, query, day, meal=chosen_meal, quantity=chosen_quantity
             )
-        else:
-            raise ValueError("pass draft_id + option, food_id + weight_id, or query")
-        return result
+        raise ValueError("pass draft_id + option, food_id + weight_id, or query")
 
     result = await with_session(ctx, op)
     if not result.get("logged"):
@@ -326,7 +318,7 @@ async def fitness_delete_food(
 async def fitness_modify_food(
     query: str,
     new_query: str | None = None,
-    meal: str = "breakfast",
+    meal: str = food_logging.DEFAULT_MEAL,
     quantity: float | None = None,
     date: str | None = None,
     draft_id: str | None = None,
