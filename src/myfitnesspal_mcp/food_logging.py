@@ -1,7 +1,7 @@
 from dataclasses import asdict
 from datetime import date
 
-from . import diary
+from . import diary, food_search
 from .food_ranking import MacroTargets, normalize_query, rank_candidates
 
 
@@ -87,7 +87,7 @@ def _build_draft(
 ) -> tuple[str, dict]:
     targets.validate()
     pin = store.pin(query)
-    candidates = diary.food_candidates(client, query, limit, search_results)
+    candidates = food_search.food_candidates(client, query, limit, search_results)
     if pin:
         _include_pin(candidates, pin)
     if not candidates:
@@ -247,7 +247,7 @@ def _unambiguous_food(
             "source": "pin",
         }
         return food, None
-    search_results = diary.search_results(client, query)
+    search_results = food_search.search_results(client, query)
     wanted_name = normalize_query(query)
     exact_by_food_id = {}
     for result in search_results[:BARE_QUERY_LIMIT]:
