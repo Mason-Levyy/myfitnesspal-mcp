@@ -15,6 +15,10 @@ def site_url(client, path: str, day: date | None = None) -> str:
 
 
 def api_headers(client, extra: dict | None = None) -> dict:
+    """MFP has no write API; these replicate what the web app's own JavaScript
+    sends. Writes authenticate with the session's Bearer token plus these
+    mfp-* client headers, and form posts add the page csrf token
+    (form_headers)."""
     headers = {
         "Authorization": f"Bearer {client.access_token}",
         "mfp-client-id": "mfp-main-js",
@@ -59,7 +63,7 @@ def get_page(client, url: str) -> tuple[lh.HtmlElement, str]:
     return doc, tokens[0]
 
 
-def get_json(client, url: str):
+def get_json(client, url: str) -> dict | None:
     resp = client.session.get(
         url, headers=api_headers(client, {"Accept": "application/json"})
     )
