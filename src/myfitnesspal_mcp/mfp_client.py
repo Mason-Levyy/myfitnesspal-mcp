@@ -7,7 +7,7 @@ import myfitnesspal
 from curl_cffi import requests as cffi_requests
 from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from . import auth, config, diary
+from . import auth, config, diary, entry_matching
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def is_auth_error(exc: Exception) -> bool:
         return True
     if isinstance(exc, diary.DiarySignedOut):
         return True
-    if isinstance(exc, diary.DiaryLookupError):
+    if isinstance(exc, entry_matching.DiaryLookupError):
         return False
     return bool(_AUTH_ERROR_PATTERN.search(str(exc)))
 
