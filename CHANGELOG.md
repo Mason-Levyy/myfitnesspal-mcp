@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-20
+
 ### Fixed
 
 - `auth` no longer fails to seed the auto-refresh browser profile when the
@@ -168,7 +170,8 @@ All notable changes to this project are documented here. The format follows
   auto-refresh, stdio and streamable HTTP transports. Published to PyPI as
   `mfp-mcp`.
 
-[Unreleased]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Mason-Levyy/myfitnesspal-mcp/compare/v0.2.1...v0.3.0
