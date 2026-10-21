@@ -269,3 +269,31 @@ def test_log_water_tool_updates_remote_and_local_total(
     assert result["ok"] is True
     assert result["water_ml"] == 1200.0
     assert local_store.day_record("2026-07-08")["nutrition"]["water_ml"] == 1200.0
+
+
+def test_tools_list_without_a_session(monkeypatch):
+    def no_session():
+        raise mfp_client.NotConnectedError("not connected")
+
+    monkeypatch.setattr(mfp_client, "get_client", no_session)
+    tools = asyncio.run(server.mcp.list_tools())
+    assert tools
+    for tool in tools:
+        assert tool.title, tool.name
+        assert tool.annotations.readOnlyHint is not None, tool.name
+        assert tool.annotations.openWorldHint is not None, tool.name
+        if not tool.annotations.readOnlyHint:
+            assert tool.annotations.destructiveHint is not None, tool.name
+            assert tool.annotations.idempotentHint is not None, tool.name
+
+
+def test_tools_that_remove_or_overwrite_are_marked_destructive():
+    tools = {tool.name: tool for tool in asyncio.run(server.mcp.list_tools())}
+    for name in [
+        "fitness_delete_food",
+        "fitness_delete_exercise",
+        "fitness_modify_food",
+    ]:
+        assert tools[name].annotations.destructiveHint, name
+    assert not tools["fitness_log_food"].annotations.destructiveHint
+    assert not tools["fitness_log_food"].annotations.idempotentHint
