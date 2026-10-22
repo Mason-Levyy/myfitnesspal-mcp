@@ -13,6 +13,11 @@ All notable changes to this project are documented here. The format follows
   Clients that support annotations can skip confirmation for read-only tools
   and warn before deletes and overwrites.
 - `llms-install.md`: install steps for AI coding agents.
+- A Claude Code plugin in `plugin/`, installable with
+  `/plugin install myfitnesspal-mcp --marketplace Mason-Levyy/myfitnesspal-mcp`.
+  It uses the session saved by `mfp-mcp auth`.
+- One-click install buttons for Cursor, VS Code, and VS Code Insiders, and
+  setup commands for Codex CLI and Gemini CLI.
 
 ## [0.4.2] - 2026-10-20
 

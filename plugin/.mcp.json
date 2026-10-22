@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "myfitnesspal": {
+      "command": "uvx",
+      "args": ["mfp-mcp==0.4.2"]
+    }
+  }
+}
