@@ -1,0 +1,14 @@
+{
+  "name": "myfitnesspal-mcp",
+  "displayName": "MyFitnessPal MCP",
+  "version": "0.4.2",
+  "description": "Log MyFitnessPal by talking to Claude: search foods with macros, log meals, weight, water, and exercise, and chart nutrition trends from your real diary.",
+  "author": {
+    "name": "Mason Levy",
+    "url": "https://github.com/Mason-Levyy"
+  },
+  "homepage": "https://github.com/Mason-Levyy/myfitnesspal-mcp",
+  "repository": "https://github.com/Mason-Levyy/myfitnesspal-mcp",
+  "license": "MIT",
+  "keywords": ["myfitnesspal", "nutrition", "calorie-tracker", "macro-tracking", "food-diary", "fitness", "health"]
+}

@@ -13,6 +13,10 @@
 [![Python](https://img.shields.io/pypi/pyversions/mfp-mcp)](https://pypi.org/project/mfp-mcp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/LICENSE)
 
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=myfitnesspal&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJtZnAtbWNwIl19)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522myfitnesspal%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522mfp-mcp%2522%255D%257D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522myfitnesspal%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522mfp-mcp%2522%255D%257D)
+
 [Quickstart](#quickstart) · [Tools](#tools) · [Authentication](#authentication) · [Changelog](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/CHANGELOG.md)
 
 <img alt="Demo: Claude logs each ingredient of a breakfast smoothie with fitness_log_food, and the entries appear in the MyFitnessPal food diary" src="https://raw.githubusercontent.com/Mason-Levyy/myfitnesspal-mcp/main/demo.gif" width="720">
@@ -54,7 +58,8 @@ username/password login that most existing integrations rely on. This server:
    uvx mfp-mcp auth
    ```
 
-2. Add the server to your client.
+2. Add the server to your client. The install buttons at the top do this in
+   one click for Cursor and VS Code.
 
    **Claude Code**
 
@@ -62,7 +67,15 @@ username/password login that most existing integrations rely on. This server:
    claude mcp add myfitnesspal -- uvx mfp-mcp
    ```
 
-   **Claude Desktop** (`claude_desktop_config.json`)
+   Or install it as a plugin:
+
+   ```
+   /plugin install myfitnesspal-mcp --marketplace Mason-Levyy/myfitnesspal-mcp
+   ```
+
+   **Claude Desktop** (`claude_desktop_config.json`), **Cursor**
+   (`~/.cursor/mcp.json`), **Windsurf** (`~/.codeium/windsurf/mcp_config.json`),
+   and **Cline** (`cline_mcp_settings.json`) all take the same entry:
 
    ```json
    {
@@ -75,11 +88,38 @@ username/password login that most existing integrations rely on. This server:
    }
    ```
 
+   <details>
+   <summary><b>VS Code, Codex CLI, Gemini CLI</b></summary>
+
+   VS Code (or use the button above):
+
+   ```bash
+   code --add-mcp '{"name":"myfitnesspal","command":"uvx","args":["mfp-mcp"]}'
+   ```
+
+   Codex CLI:
+
+   ```bash
+   codex mcp add myfitnesspal -- uvx mfp-mcp
+   ```
+
+   Gemini CLI:
+
+   ```bash
+   gemini mcp add myfitnesspal uvx mfp-mcp
+   ```
+
+   </details>
+
 3. Talk to it: *"log a banana as a snack"*, *"what did I eat yesterday?"*,
    *"chart my weight this month"*.
 
 Requires [uv](https://docs.astral.sh/uv/). Any MCP client that speaks stdio or
 streamable HTTP works, not just Claude.
+
+> **Finding this useful?** A ⭐ on
+> [GitHub](https://github.com/Mason-Levyy/myfitnesspal-mcp) helps other
+> MyFitnessPal users find it.
 
 ## Authentication
 
@@ -276,6 +316,14 @@ MyFitnessPal changes something. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 setup, style, and the PR checklist, and [SECURITY.md](SECURITY.md) for how to
 report vulnerabilities privately. Release history is in
 [CHANGELOG.md](CHANGELOG.md).
+
+## Support the project
+
+If this server saves you time, please
+[star the repo](https://github.com/Mason-Levyy/myfitnesspal-mcp). Stars are
+how other MyFitnessPal users find it in GitHub search and MCP directories. Bug
+reports and endpoint captures are just as welcome in
+[issues](https://github.com/Mason-Levyy/myfitnesspal-mcp/issues).
 
 ## License
 

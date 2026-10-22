@@ -172,6 +172,6 @@ version.
   squash-merge, so the PR title becomes the commit subject.
 - User-visible changes get an entry under **Unreleased** in `CHANGELOG.md`.
   Don't create any other new docs unless asked.
-- A release bumps `version` in `pyproject.toml` and both version fields in
-  `server.json` together, and CI fails if they drift. CONTRIBUTING.md has the
-  full steps.
+- A release bumps `version` in `pyproject.toml`, both version fields in
+  `server.json`, and the Claude Code plugin's version and pin in `plugin/`
+  together, and CI fails if they drift. CONTRIBUTING.md has the full steps.

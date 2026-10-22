@@ -113,8 +113,10 @@ water logging) works, the most useful thing you can share is the request shape:
 
 ## Releasing (maintainers)
 
-Releases are cut automatically. Bump `version` in `pyproject.toml` **and** the
-two version fields in `server.json` (CI fails if they drift), move the
+Releases are cut automatically. Bump `version` in `pyproject.toml`, the two
+version fields in `server.json`, `version` in `plugin/.claude-plugin/plugin.json`,
+and the `mfp-mcp==X.Y.Z` pin in `plugin/.mcp.json` together (CI fails if they
+drift), move the
 **Unreleased** section of `CHANGELOG.md` under the new version, and merge to
 `main`. The publish workflow tags `vX.Y.Z`, creates a GitHub release, publishes
 to PyPI via trusted publishing, and pushes to the MCP Registry.

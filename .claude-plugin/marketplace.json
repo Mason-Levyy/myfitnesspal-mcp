@@ -1,0 +1,17 @@
+{
+  "name": "myfitnesspal-mcp",
+  "owner": {
+    "name": "Mason Levy",
+    "url": "https://github.com/Mason-Levyy"
+  },
+  "metadata": {
+    "description": "The MyFitnessPal MCP server as a Claude Code plugin."
+  },
+  "plugins": [
+    {
+      "name": "myfitnesspal-mcp",
+      "source": "./plugin",
+      "description": "MyFitnessPal in Claude Code: log meals by talking, search foods with macros, and track weight, water, exercise, and nutrition trends."
+    }
+  ]
+}
