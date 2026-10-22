@@ -219,6 +219,29 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
 - **curl_cffi install issues**: prebuilt wheels cover Linux/macOS/Windows;
   musl (Alpine) builds from source.
 
+## FAQ
+
+**Is there an official MyFitnessPal API?** Not one you can use. MyFitnessPal's
+API is limited to approved partners and isn't open to new applications, so
+there's no API key to get. This server signs in with your own browser session
+cookie and makes the same requests the MyFitnessPal website makes (see
+[How it works](#how-it-works)).
+
+**Which MCP clients does it work with?** Any client that runs a stdio or
+streamable HTTP server, including Claude Desktop, Claude Code, Cursor, Windsurf,
+Cline, and VS Code. Use the `uvx mfp-mcp` command from the
+[Quickstart](#quickstart). AI coding agents can follow
+[llms-install.md](https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/llms-install.md).
+
+**Can it log meals as well as read them?** Yes. It logs, replaces, and deletes
+diary entries, logs weight and water, and writes the daily note. See
+[Tools](#tools).
+
+**Where does my data go?** The server talks only to MyFitnessPal. The session
+cookie stays in your local config directory, and day summaries, feel notes,
+and remembered foods stay in a local SQLite file. Tool results go to whichever
+MCP client and model you connect it to.
+
 ## How it works
 
 - [python-myfitnesspal](https://github.com/coddingtonbear/python-myfitnesspal)

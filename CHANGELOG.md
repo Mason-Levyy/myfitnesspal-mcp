@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Every tool now has a display title and MCP tool annotations
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+  Clients that support annotations can skip confirmation for read-only tools
+  and warn before deletes and overwrites.
+- `llms-install.md`: install steps for AI coding agents.
+
 ## [0.4.2] - 2026-10-20
 
 ### Fixed

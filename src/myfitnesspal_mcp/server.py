@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from . import (
     diary,
@@ -21,6 +22,21 @@ from .food_ranking import MacroTargets
 from .store import Store, trend_column
 
 mcp = FastMCP("myfitnesspal")
+
+READS_MFP = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
+READS_LOCAL = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+ADDS_TO_MFP = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+)
+SETS_IN_MFP = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True
+)
+CHANGES_MFP = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True
+)
+SETS_LOCAL = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False
+)
 
 _store: Store | None = None
 
@@ -94,7 +110,7 @@ async def refresh_after_write(ctx: Context, day: datetime.date) -> dict:
     return {}
 
 
-@mcp.tool()
+@mcp.tool(title="Get day summary", annotations=READS_MFP)
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
     local feel note for a day.
@@ -111,7 +127,7 @@ async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Search foods", annotations=READS_MFP)
 async def fitness_search_food(
     query: str, limit: int = 5, with_macros: bool = True, ctx: Context = None
 ) -> dict:
@@ -130,7 +146,7 @@ async def fitness_search_food(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Draft food entry", annotations=READS_MFP)
 async def fitness_draft_food(
     query: str,
     quantity: float = 1.0,
@@ -187,7 +203,7 @@ async def fitness_draft_food(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Log food", annotations=ADDS_TO_MFP)
 async def fitness_log_food(
     query: str | None = None,
     meal: str | None = None,
@@ -267,14 +283,14 @@ async def fitness_log_food(
     }
 
 
-@mcp.tool()
+@mcp.tool(title="List remembered foods", annotations=READS_LOCAL)
 def fitness_list_food_pins() -> dict:
     """List remembered food choices (query → food and serving) that
     fitness_log_food reuses. Stored locally only."""
     return {"pins": get_store().pins()}
 
 
-@mcp.tool()
+@mcp.tool(title="Forget remembered food", annotations=SETS_LOCAL)
 def fitness_clear_food_pin(query: str | None = None, clear_all: bool = False) -> dict:
     """Forget a remembered food choice for `query`, or every choice with
     clear_all=True, so the next log of that query drafts options again."""
@@ -286,7 +302,7 @@ def fitness_clear_food_pin(query: str | None = None, clear_all: bool = False) ->
     return {"cleared": int(store.clear_pin(query))}
 
 
-@mcp.tool()
+@mcp.tool(title="Delete food entry", annotations=CHANGES_MFP)
 async def fitness_delete_food(
     query: str, meal: str | None = None, date: str | None = None, ctx: Context = None
 ) -> dict:
@@ -311,7 +327,7 @@ async def fitness_delete_food(
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
 
 
-@mcp.tool()
+@mcp.tool(title="Replace food entry", annotations=CHANGES_MFP)
 async def fitness_modify_food(
     query: str,
     new_query: str | None = None,
@@ -361,7 +377,7 @@ async def fitness_modify_food(
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
 
 
-@mcp.tool()
+@mcp.tool(title="Log weight", annotations=SETS_IN_MFP)
 async def fitness_log_weight(
     weight: float, date: str | None = None, ctx: Context = None
 ) -> dict:
@@ -381,7 +397,7 @@ async def fitness_log_weight(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Log water", annotations=CHANGES_MFP)
 async def fitness_log_water(
     amount: float,
     unit: str = "cup",
@@ -409,7 +425,7 @@ async def fitness_log_water(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Get exercise diary", annotations=READS_MFP)
 async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal exercise diary (cardio + strength) for a day.
 
@@ -423,7 +439,7 @@ async def fitness_get_exercise(date: str | None = None, ctx: Context = None) -> 
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="List exercise entries", annotations=READS_MFP)
 async def fitness_get_exercise_entries(
     date: str | None = None, ctx: Context = None
 ) -> dict:
@@ -443,7 +459,7 @@ async def fitness_get_exercise_entries(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Delete exercise entry", annotations=CHANGES_MFP)
 async def fitness_delete_exercise(
     query: str,
     date: str | None = None,
@@ -471,7 +487,7 @@ async def fitness_delete_exercise(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Get daily note", annotations=READS_MFP)
 async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal daily diary note (the free-text 'Notes' box at the
     bottom of the day) straight from your account.
@@ -488,7 +504,7 @@ async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Write daily note", annotations=CHANGES_MFP)
 async def fitness_log_note(
     text: str, date: str | None = None, append: bool = False, ctx: Context = None
 ) -> dict:
@@ -509,7 +525,7 @@ async def fitness_log_note(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Save feel note", annotations=SETS_LOCAL)
 def fitness_log_feel(
     note: str | None = None, rating: int | None = None, date: str | None = None
 ) -> dict:
@@ -522,7 +538,7 @@ def fitness_log_feel(
     return get_store().set_feel(day.isoformat(), note, rating)
 
 
-@mcp.tool()
+@mcp.tool(title="Get metric trend", annotations=READS_MFP)
 async def fitness_get_trends(
     metric: str, start: str | None = None, end: str | None = None, ctx: Context = None
 ) -> dict:
@@ -545,7 +561,7 @@ async def fitness_get_trends(
     return await with_session(ctx, op)
 
 
-@mcp.tool()
+@mcp.tool(title="Export date range", annotations=READS_MFP)
 async def fitness_bulk_export(
     start: str | None = None,
     end: str | None = None,
