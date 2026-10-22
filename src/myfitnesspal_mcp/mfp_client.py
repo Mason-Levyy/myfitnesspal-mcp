@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_HINT = (
     "MyFitnessPal session expired or not connected. "
-    "Re-run 'myfitnesspal-mcp auth' or update MFP_COOKIE, then retry."
+    f"Re-run '{auth.AUTH_COMMAND}' or update MFP_COOKIE, then retry."
 )
 
 
