@@ -1,7 +1,7 @@
 {
   "name": "myfitnesspal-mcp",
   "displayName": "MyFitnessPal MCP",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Log MyFitnessPal by talking to Claude: search foods with macros, log meals, weight, water, and exercise, and chart nutrition trends from your real diary.",
   "author": {
     "name": "Mason Levy",
