@@ -5,6 +5,7 @@ import sys
 from . import config
 
 SESSION_COOKIE = "__Secure-next-auth.session-token"
+AUTH_COMMAND = "uvx mfp-mcp auth"
 
 INSTRUCTIONS = """\
 Connect your MyFitnessPal account
@@ -122,7 +123,7 @@ def run_check() -> int:
     if source is None:
         print("Session:      none saved")
         print(f"Auto-refresh: {auto_refresh_summary}")
-        print("Fix: run 'myfitnesspal-mcp auth' to connect your account.")
+        print(f"Fix: run '{AUTH_COMMAND}' to connect your account.")
         return 1
 
     print(f"Session:      from {source}")
@@ -134,10 +135,10 @@ def run_check() -> int:
         if auto_refresh_ready:
             print(
                 "Fix: the server will try a headless-browser refresh on the next "
-                "tool call; if that fails, run 'myfitnesspal-mcp auth'."
+                f"tool call; if that fails, run '{AUTH_COMMAND}'."
             )
         else:
-            print("Fix: run 'myfitnesspal-mcp auth' with a fresh cookie.")
+            print(f"Fix: run '{AUTH_COMMAND}' with a fresh cookie.")
         return 1
 
     print(f"Status:       valid, connected as {client.effective_username}")
@@ -156,7 +157,7 @@ def run_auth_flow() -> int:
     if not pasted.strip():
         print(
             "No cookie received. Run this in an interactive terminal, or pipe "
-            "the token in: myfitnesspal-mcp auth < token.txt",
+            f"the token in: {AUTH_COMMAND} < token.txt",
             file=sys.stderr,
         )
         return 1

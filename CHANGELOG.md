@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format follows
 - One-click install buttons for Cursor, VS Code, and VS Code Insiders, and
   setup commands for Codex CLI and Gemini CLI.
 
+### Fixed
+
+- Reconnect hints now say `uvx mfp-mcp auth`. They named `myfitnesspal-mcp auth`,
+  which isn't on the PATH after a `uvx` install and isn't a package on PyPI.
+- A tool call that fails after a session refresh no longer repeats the
+  reconnect hint twice in its error.
+
 ## [0.4.2] - 2026-10-20
 
 ### Fixed

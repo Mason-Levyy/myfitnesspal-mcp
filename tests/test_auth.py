@@ -82,7 +82,7 @@ def test_check_without_session_skips_network(check_env, monkeypatch, capsys):
     assert auth.run_check() == 1
     output = capsys.readouterr().out
     assert "none saved" in output
-    assert "myfitnesspal-mcp auth" in output
+    assert "uvx mfp-mcp auth" in output
 
 
 def test_check_valid_session_changes_nothing(check_env, monkeypatch, capsys):

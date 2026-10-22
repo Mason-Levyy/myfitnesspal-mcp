@@ -70,7 +70,7 @@ Restart or reload the client afterwards.
 ## 4. Verify
 
 Call `fitness_get_day` with no arguments. It returns today's diary. An error
-mentioning `myfitnesspal-mcp auth` means step 2 didn't complete: run
+mentioning `mfp-mcp auth` means step 2 didn't complete: run
 `uvx mfp-mcp auth --check` and have the user re-run `uvx mfp-mcp auth`.
 
 ## Optional: auto-refresh
