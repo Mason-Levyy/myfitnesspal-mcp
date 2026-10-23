@@ -25,10 +25,13 @@
 
 </div>
 
-Connect MyFitnessPal to Claude or any MCP client. Log meals by talking, search
+MyFitnessPal MCP is a free, open-source MCP server that connects MyFitnessPal
+to Claude, Cursor, VS Code, or any MCP client. Log meals by talking, search
 the food database with macros, track trends, and export your nutrition history, all against your real MyFitnessPal diary.
 
-Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/).
+Published on PyPI as [`mfp-mcp`](https://pypi.org/project/mfp-mcp/) and in the
+[official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Mason-Levyy/mfp-mcp)
+as `io.github.Mason-Levyy/mfp-mcp`.
 
 <!-- mcp-name: io.github.Mason-Levyy/mfp-mcp -->
 
@@ -260,6 +263,15 @@ an authenticating reverse proxy, or an OAuth-aware MCP gateway.
   musl (Alpine) builds from source.
 
 ## FAQ
+
+**How do I connect MyFitnessPal to Claude?** Run `uvx mfp-mcp auth` once to
+save your MyFitnessPal session, then add the server: `claude mcp add
+myfitnesspal -- uvx mfp-mcp` in Claude Code, or the JSON entry from the
+[Quickstart](#quickstart) in Claude Desktop. Then ask Claude to log a meal or
+show yesterday's diary.
+
+**Is it free?** Yes. It's open source under the MIT license, and it doesn't
+sell or collect anything.
 
 **Is there an official MyFitnessPal API?** Not one you can use. MyFitnessPal's
 API is limited to approved partners and isn't open to new applications, so
