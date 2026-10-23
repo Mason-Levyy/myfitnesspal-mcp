@@ -8,6 +8,7 @@ from mcp.types import ToolAnnotations
 
 from . import (
     custom_items,
+    custom_writes,
     diary,
     exercise,
     food_logging,
@@ -138,6 +139,7 @@ async def fitness_search_food(
 
     Each candidate has name, brand, calories, macros, serving, and the
     food_id + weight_id to pass to fitness_log_food to log exactly that item.
+    external_id is the id fitness_create_custom takes for a recipe ingredient.
     """
 
     def op(store, client):
@@ -350,6 +352,58 @@ async def fitness_log_custom(
         **await refresh_after_write(ctx, day),
         "day": get_store().day_record(day.isoformat()),
     }
+
+
+@mcp.tool(title="Create a custom item", annotations=ADDS_TO_MFP)
+async def fitness_create_custom(
+    kind: str,
+    name: str,
+    nutrition: dict | None = None,
+    brand: str | None = None,
+    serving_size: float | None = None,
+    serving_unit: str | None = None,
+    servings: float | None = None,
+    ingredients: list[dict] | None = None,
+    meal: str | None = None,
+    date: str | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Create a private custom food, saved meal or recipe in MyFitnessPal. Log
+    it afterwards with fitness_log_custom. Refuses a meal or recipe name that
+    already exists, and arguments that don't apply to `kind`.
+
+    kind=food: nutrition {calories, protein, carbs, fat, and optionally fiber,
+    sugar, sodium, saturated_fat} in grams (sodium in mg) for one serving of
+    serving_size x serving_unit (default 1 x "serving", e.g. 1 x "bar").
+    brand is optional.
+    kind=meal: saves what is logged in `meal` (breakfast|lunch|dinner|snacks
+    or any meal name on the account) on `date` (YYYY-MM-DD, default today),
+    like the website's "Remember Meal". Log the foods first.
+    kind=recipe: servings is how many servings it makes; ingredients is
+    [{external_id, quantity, serving}], one per ingredient. external_id comes
+    from a fitness_search_food candidate; serving names one of that food's
+    serving sizes (e.g. "cup"; required when it has several) and quantity is
+    how many of it go in (default 1). MyFitnessPal computes the nutrition.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return custom_writes.create_custom(
+            client,
+            kind,
+            name,
+            day=day,
+            nutrition=nutrition,
+            brand=brand,
+            serving_size=serving_size,
+            serving_unit=serving_unit,
+            servings=servings,
+            ingredients=ingredients,
+            meal=meal,
+            date=date,
+        )
+
+    return {"ok": True, **await with_session(ctx, op)}
 
 
 @mcp.tool(title="List remembered foods", annotations=READS_LOCAL)

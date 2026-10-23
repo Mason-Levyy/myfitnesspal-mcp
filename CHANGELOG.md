@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format follows
   with their ids, servings and nutrition, and `fitness_log_custom` logs one
   by name (a saved meal logs as its ingredients). None of these show up in
   food search.
+- `fitness_create_custom` creates a private custom food, a saved meal (from
+  what is logged in one meal of a day, like the website's "Remember Meal"),
+  or a recipe.
+- `fitness_search_food` candidates include `external_id`, which
+  `fitness_create_custom` takes for each recipe ingredient.
 - Food log results include `added_entries`: the diary entries MyFitnessPal
   actually added, read back from the diary.
 
