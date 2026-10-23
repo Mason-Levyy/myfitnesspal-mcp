@@ -96,10 +96,14 @@ def no_matching_entry(
 LISTED_NAMES_LIMIT = 15
 
 
-def matching(options: list[dict], wanted: str, key: str) -> list[dict]:
+def matching(
+    options: list[dict], wanted: str, key: str, *, exact_only: bool = False
+) -> list[dict]:
     target = collapse_whitespace(wanted).lower()
     exact = [option for option in options if option[key].lower() == target]
-    return exact or [option for option in options if target in option[key].lower()]
+    if exact or exact_only:
+        return exact
+    return [option for option in options if target in option[key].lower()]
 
 
 def listed_names(pool: list[dict], more_hint: str = "") -> str:

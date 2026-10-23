@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format follows
   or a recipe. It refuses a name already used by an item of the same kind.
 - `fitness_search_food` candidates include `external_id`, which
   `fitness_create_custom` takes for each recipe ingredient.
+- `fitness_delete_custom` deletes a custom food, saved meal or recipe by
+  exact name. It deletes nothing when it can't tell which item a name means.
 
 ### Changed
 

@@ -9,6 +9,7 @@ from mcp.types import ToolAnnotations
 
 from . import (
     __version__,
+    custom_delete,
     custom_items,
     custom_writes,
     day_completion,
@@ -434,6 +435,22 @@ async def fitness_create_custom(
             meal=meal,
             date=date,
         )
+
+    return {"ok": True, **await with_session(ctx, op)}
+
+
+@mcp.tool(title="Delete a custom item", annotations=CHANGES_MFP)
+async def fitness_delete_custom(name: str, kind: str, ctx: Context = None) -> dict:
+    """Delete one of your custom foods, saved meals or recipes. This cannot be
+    undone.
+
+    name: the item's exact name as fitness_list_custom shows it (no partial
+    matches). kind: food | meal | recipe (plural forms also work). Refuses,
+    deleting nothing, when it can't tell which item the name means.
+    """
+
+    def op(store, client):
+        return custom_delete.delete_custom(client, name, kind)
 
     return {"ok": True, **await with_session(ctx, op)}
 

@@ -32,6 +32,7 @@ class Kind:
     read_details: Callable[[object], list[tuple[str, dict]]]
     empty_details: dict
     create_fields: frozenset[str]
+    id_field: str
 
 
 class NoSuchItem(DiaryLookupError):
@@ -154,6 +155,7 @@ KINDS = {
         _food_details,
         {"id": None, "nutrition": None},
         frozenset({"nutrition", "brand", "serving_size", "serving_unit"}),
+        "id",
     ),
     "meals": Kind(
         "meal",
@@ -161,6 +163,7 @@ KINDS = {
         _meal_details,
         {"meal_id": None, "ingredients": None, "nutrition": None},
         frozenset({"meal", "date"}),
+        "meal_id",
     ),
     "recipes": Kind(
         "recipe",
@@ -168,6 +171,7 @@ KINDS = {
         _recipe_details,
         {"recipe_id": None, "recipe_servings": None, "nutrition": None},
         frozenset({"servings", "ingredients"}),
+        "recipe_id",
     ),
 }
 
@@ -296,27 +300,29 @@ def list_custom(client, kind: str = "all", query: str | None = None) -> dict:
     return {"items": items, "warnings": warnings}
 
 
-def pick(items: list[dict], name: str) -> dict:
+def pick(items: list[dict], name: str, *, exact_only: bool = False) -> dict:
     if not name.strip():
         raise NoSuchItem(
             f"name is required; pick one from: {listed_names(items, NARROW_HINT)}"
         )
-    found = matching(items, name, "name")
+    found = matching(items, name, "name", exact_only=exact_only)
     if len(found) == 1:
         return found[0]
     if found and len({item["name"].lower() for item in found}) == 1:
         raise NoSuchItem(
             f"several items are named {found[0]['name']!r}, so the name can't "
             "pick one. To log one, pass its food_id and weight_id from "
-            "fitness_list_custom to fitness_log_food"
+            "fitness_list_custom to fitness_log_food; to delete one, rename or "
+            "delete it in the MyFitnessPal app"
         )
     if found:
         raise NoSuchItem(
             f"{name!r} matches several items: {listed_names(found, NARROW_HINT)}. "
             "Use one exact name."
         )
+    needs = "an exact name" if exact_only else "a name"
     raise NoSuchItem(
-        f"nothing matches {name!r}; give a name from: "
+        f"nothing matches {name!r}; give {needs} from: "
         f"{listed_names(items, NARROW_HINT)}"
     )
 
