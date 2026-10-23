@@ -18,6 +18,8 @@ All notable changes to this project are documented here. The format follows
   with their ids, servings and nutrition, and `fitness_log_custom` logs one
   by name (a saved meal logs as its ingredients). None of these show up in
   food search.
+- `fitness_delete_custom` deletes a custom food, saved meal or recipe by
+  exact name. It deletes nothing when it can't tell which item a name means.
 - Food log results include `added_entries`: the diary entries MyFitnessPal
   actually added, read back from the diary.
 

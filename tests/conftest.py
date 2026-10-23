@@ -46,6 +46,10 @@ class FakeSession:
         self.calls.append(("POST", url, kwargs))
         return self._match("POST", url)
 
+    def delete(self, url, **kwargs):
+        self.calls.append(("DELETE", url, kwargs))
+        return self._match("DELETE", url)
+
 
 class FakeClient:
     BASE_URL_SECURE = "https://www.myfitnesspal.com/"

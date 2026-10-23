@@ -314,6 +314,7 @@ def test_tools_that_remove_or_overwrite_are_marked_destructive():
         "fitness_delete_food",
         "fitness_delete_exercise",
         "fitness_modify_food",
+        "fitness_delete_custom",
     ]:
         assert tools[name].annotations.destructiveHint, name
     assert not tools["fitness_log_food"].annotations.destructiveHint
