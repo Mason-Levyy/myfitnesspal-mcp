@@ -14,6 +14,8 @@ All notable changes to this project are documented here. The format follows
 - `auth --clipboard` waits for the session cookie on the macOS clipboard and
   connects as soon as you copy it, skipping anything that isn't a session
   token (such as the command itself) and any token that doesn't authenticate.
+- Food log results include `added_entries`: the diary entries MyFitnessPal
+  actually added, read back from the diary.
 
 ### Changed
 
@@ -24,6 +26,14 @@ All notable changes to this project are documented here. The format follows
   also see 1 for a session that is about to lapse.
 - `cookies.json` now also holds MyFitnessPal's long-lived remember-me cookies
   next to the session token. The file's format is unchanged.
+- A food log that adds nothing to the diary now fails with an error instead
+  of reporting success. MyFitnessPal answers `/food/add` with 200 for any
+  `food_id`/`weight_id`, so a stale or invented id used to look logged.
+  Each log reads the day's diary once more to check. When
+  `fitness_modify_food`'s replacement adds nothing, the error says the
+  original entry was already removed. When the read-back itself fails, the
+  log fails with an error that says the food may already be in the diary,
+  and the session refresh does not re-send the add.
 
 ### Fixed
 

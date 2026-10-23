@@ -231,6 +231,13 @@ async def fitness_log_food(
     to pick from. With food_id + weight_id (from fitness_search_food): logs
     exactly that item, `query` being its display name.
 
+    A logged result lists `added_entries` (meal, name): what MyFitnessPal
+    actually put in the diary. MyFitnessPal accepts any food_id, so if the
+    names are not the food you meant, delete them. An error saying no entry
+    was added means nothing was logged. An error saying the diary could not
+    be read back means the food may be logged: check with fitness_get_day
+    before logging it again.
+
     meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
     on the account. quantity: number of servings (default 1).
     date: YYYY-MM-DD (default today).
