@@ -31,6 +31,7 @@ class Kind:
     tab: str
     read_details: Callable[[object], list[tuple[str, dict]]]
     empty_details: dict
+    id_field: str
 
 
 class NoSuchItem(DiaryLookupError):
@@ -147,18 +148,22 @@ def _recipe_details(client) -> list[tuple[str, dict]]:
 
 
 KINDS = {
-    "foods": Kind("food", "my_foods", _food_details, {"id": None, "nutrition": None}),
+    "foods": Kind(
+        "food", "my_foods", _food_details, {"id": None, "nutrition": None}, "id"
+    ),
     "meals": Kind(
         "meal",
         "meals",
         _meal_details,
         {"meal_id": None, "ingredients": None, "nutrition": None},
+        "meal_id",
     ),
     "recipes": Kind(
         "recipe",
         "recipes",
         _recipe_details,
         {"recipe_id": None, "recipe_servings": None, "nutrition": None},
+        "recipe_id",
     ),
 }
 
@@ -170,6 +175,13 @@ def kinds(kind: str) -> list[str]:
     if plural not in KINDS:
         raise ValueError(f"kind must be one of: all, {', '.join(KINDS)}")
     return [plural]
+
+
+def single_kind(kind: str) -> str:
+    plurals = kinds(kind)
+    if len(plurals) != 1:
+        raise ValueError("kind must be one of: food, meal, recipe")
+    return plurals[0]
 
 
 def _tab_row(tr, kind: str) -> dict | None:
@@ -280,27 +292,29 @@ def list_custom(client, kind: str = "all", query: str | None = None) -> dict:
     return {"items": items, "warnings": warnings}
 
 
-def pick(items: list[dict], name: str) -> dict:
+def pick(items: list[dict], name: str, *, exact_only: bool = False) -> dict:
     if not name.strip():
         raise NoSuchItem(
             f"name is required; pick one from: {listed_names(items, NARROW_HINT)}"
         )
-    found = matching(items, name, "name")
+    found = matching(items, name, "name", exact_only=exact_only)
     if len(found) == 1:
         return found[0]
     if found and len({item["name"].lower() for item in found}) == 1:
         raise NoSuchItem(
             f"several items are named {found[0]['name']!r}, so the name can't "
             "pick one. To log one, pass its food_id and weight_id from "
-            "fitness_list_custom to fitness_log_food"
+            "fitness_list_custom to fitness_log_food; to delete one, rename or "
+            "delete it in the MyFitnessPal app"
         )
     if found:
         raise NoSuchItem(
             f"{name!r} matches several items: {listed_names(found, NARROW_HINT)}. "
             "Use one exact name."
         )
+    needs = "an exact name" if exact_only else "a name"
     raise NoSuchItem(
-        f"nothing matches {name!r}; give a name from: "
+        f"nothing matches {name!r}; give {needs} from: "
         f"{listed_names(items, NARROW_HINT)}"
     )
 
