@@ -9,6 +9,7 @@ from mcp.types import ToolAnnotations
 
 from . import (
     __version__,
+    day_completion,
     diary,
     exercise,
     food_logging,
@@ -395,6 +396,30 @@ async def fitness_modify_food(
     if result.get("needs_choice"):
         return {"ok": True, **result}
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
+
+
+@mcp.tool(title="Complete diary day", annotations=SETS_IN_MFP)
+async def fitness_complete_day(
+    complete: bool | None = None, date: str | None = None, ctx: Context = None
+) -> dict:
+    """Report whether a MyFitnessPal diary day is marked complete, or mark it
+    complete (the Food tab's "Complete This Entry") or reopen it.
+
+    complete: omit (default) to only report the state; true to mark the day
+    complete; false to reopen it ("Make Additional Entries").
+    date: YYYY-MM-DD (default: today). `complete` is null when the diary page
+    has no completion section. On a complete day, `message` is MyFitnessPal's
+    text under the button: its five-week weight projection, or a warning that
+    the day is under the calorie minimum; otherwise it is null.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        if complete is None:
+            return day_completion.day_state(client, day)
+        return day_completion.set_day_complete(client, day, complete)
+
+    return {"ok": True, **await with_session(ctx, op)}
 
 
 @mcp.tool(title="Log weight", annotations=SETS_IN_MFP)

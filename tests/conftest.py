@@ -33,7 +33,7 @@ class FakeSession:
     def _match(self, method, url):
         for (m, fragment), response in self.routes.items():
             if m == method and fragment in url:
-                return response
+                return response(self.calls) if callable(response) else response
         raise AssertionError(f"no fake route for {method} {url}")
 
     def get(self, url, **kwargs):

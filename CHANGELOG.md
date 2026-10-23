@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `fitness_complete_day` reports whether a diary day is marked complete, or
+  marks it complete or reopens it, as the website's "Complete This Entry"
+  button does. A bare call only reports.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added
