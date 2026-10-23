@@ -7,6 +7,7 @@
 
 **Log MyFitnessPal by talking to your AI.**
 
+[![Mason-Levyy/myfitnesspal-mcp MCP server](https://glama.ai/mcp/servers/Mason-Levyy/myfitnesspal-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Mason-Levyy/myfitnesspal-mcp)
 [![PyPI](https://img.shields.io/pypi/v/mfp-mcp?color=0a64e6)](https://pypi.org/project/mfp-mcp/)
 [![GitHub stars](https://img.shields.io/github/stars/Mason-Levyy/myfitnesspal-mcp?style=flat&color=0a64e6)](https://github.com/Mason-Levyy/myfitnesspal-mcp/stargazers)
 [![CI](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mason-Levyy/myfitnesspal-mcp/actions/workflows/ci.yml)
