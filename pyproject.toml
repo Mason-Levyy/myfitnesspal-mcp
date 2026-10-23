@@ -12,10 +12,13 @@ keywords = [
     "model-context-protocol",
     "myfitnesspal",
     "myfitnesspal-api",
+    "myfitnesspal-mcp",
     "nutrition",
     "calorie-tracker",
     "macro-tracking",
     "food-diary",
+    "food-tracking",
+    "calorie-counter",
     "fitness",
     "health",
     "claude",
@@ -49,6 +52,8 @@ dependencies = [
 autorefresh = ["playwright>=1.40"]
 
 [project.urls]
+Homepage = "https://github.com/Mason-Levyy/myfitnesspal-mcp"
+Documentation = "https://github.com/Mason-Levyy/myfitnesspal-mcp#readme"
 Repository = "https://github.com/Mason-Levyy/myfitnesspal-mcp"
 Changelog = "https://github.com/Mason-Levyy/myfitnesspal-mcp/blob/main/CHANGELOG.md"
 Issues = "https://github.com/Mason-Levyy/myfitnesspal-mcp/issues"

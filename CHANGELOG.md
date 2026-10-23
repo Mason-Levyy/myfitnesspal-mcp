@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- An icon, a website link and a clearer description in `server.json`, so the
+  MCP Registry and the directories that mirror it show the server properly.
+- `glama.json`, so the Glama listing can be claimed from the repo.
+
 ## [0.4.3] - 2026-10-22
 
 ### Added
