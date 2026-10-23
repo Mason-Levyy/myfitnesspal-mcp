@@ -33,7 +33,7 @@ class FakeSession:
     def _match(self, method, url):
         for (m, fragment), response in self.routes.items():
             if m == method and fragment in url:
-                return response
+                return response(self.calls) if callable(response) else response
         raise AssertionError(f"no fake route for {method} {url}")
 
     def get(self, url, **kwargs):
@@ -66,6 +66,24 @@ class FakeClient:
         self.session.route(
             "GET", f"v2/foods/{mfp_id}?", FakeResponse(json_data={"item": item})
         )
+
+
+ADDED_ROW = (
+    '<tr><td><a data-food-entry-id="e-new{n}">Added Food, 1 serving</a></td></tr>'
+)
+
+
+def diary_after_add(before_html, new_row=ADDED_ROW):
+    def respond(calls):
+        adds = sum(1 for m, url, _ in calls if m == "POST" and "food/add" in url)
+        rows = "".join(new_row.replace("{n}", str(n)) + "\n  " for n in range(adds))
+        return FakeResponse(
+            text=before_html.replace(
+                '<tr class="bottom">', rows + '<tr class="bottom">'
+            )
+        )
+
+    return respond
 
 
 @pytest.fixture
@@ -105,7 +123,7 @@ def custom_meals_diary_html():
 def client(search_html, diary_html):
     fake = FakeClient()
     fake.session.route("GET", "food/search", FakeResponse(text=search_html))
-    fake.session.route("GET", "food/diary?date=", FakeResponse(text=diary_html))
+    fake.session.route("GET", "food/diary?date=", diary_after_add(diary_html))
     fake.session.route("POST", "food/add", FakeResponse(status_code=204))
     fake.session.route("POST", "food/remove", FakeResponse(status_code=200))
     fake.session.route(
