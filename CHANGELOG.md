@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows
 - `auth --clipboard` waits for the session cookie on the macOS clipboard and
   connects as soon as you copy it, skipping anything that isn't a session
   token (such as the command itself) and any token that doesn't authenticate.
+- `fitness_list_custom` lists your custom foods, saved meals and recipes
+  with their ids, servings and nutrition, and `fitness_log_custom` logs one
+  by name (a saved meal logs as its ingredients). None of these show up in
+  food search.
 - Food log results include `added_entries`: the diary entries MyFitnessPal
   actually added, read back from the diary.
 
