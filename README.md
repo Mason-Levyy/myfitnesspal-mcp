@@ -172,6 +172,7 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_clear_food_pin` | Forget one remembered choice, or all of them |
 | `fitness_delete_food` | Remove a diary entry by name match |
 | `fitness_modify_food` | Replace an entry (or change its quantity), choosing the replacement like `fitness_log_food` |
+| `fitness_complete_day` | Report whether a diary day is complete, mark it complete ("Complete This Entry"), or reopen it |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
 | `fitness_log_water` | Add water (cups, fl oz, mL, L) or set the day's total with `replace` |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |

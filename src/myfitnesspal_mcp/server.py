@@ -7,6 +7,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
 from . import (
+    day_completion,
     diary,
     exercise,
     food_logging,
@@ -377,6 +378,27 @@ async def fitness_modify_food(
     if result.get("needs_choice"):
         return {"ok": True, **result}
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
+
+
+@mcp.tool(title="Complete diary day", annotations=SETS_IN_MFP)
+async def fitness_complete_day(
+    complete: bool | None = None, date: str | None = None, ctx: Context = None
+) -> dict:
+    """Report whether a MyFitnessPal diary day is marked complete, or mark it
+    complete (the Food tab's "Complete This Entry") or reopen it.
+
+    complete: omit (default) to only report the state; true to mark the day
+    complete, which posts it to your MyFitnessPal news feed as the website's
+    button does; false to reopen it ("Make Additional Entries").
+    date: YYYY-MM-DD (default: today). `message` is MyFitnessPal's text under
+    the button, e.g. its five-week weight projection.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return day_completion.set_day_complete(client, day, complete)
+
+    return {"ok": True, **await with_session(ctx, op)}
 
 
 @mcp.tool(title="Log weight", annotations=SETS_IN_MFP)
