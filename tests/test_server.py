@@ -47,6 +47,13 @@ def test_run_with_refresh_retries_auth_failures(monkeypatch):
     assert "succeeded" in ctx.messages[1]
 
 
+def test_run_with_refresh_saves_the_session_after_a_call(monkeypatch):
+    saved = []
+    monkeypatch.setattr(mfp_client, "persist_session", lambda: saved.append(True))
+    assert asyncio.run(server.run_with_refresh(FakeContext(), lambda: "ok")) == "ok"
+    assert saved == [True]
+
+
 def test_run_with_refresh_gives_clear_error_when_retry_fails(monkeypatch):
     monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
 

@@ -21,6 +21,12 @@ def main() -> None:
         help="with auth: report whether the saved session works, without prompting",
     )
     parser.add_argument(
+        "--clipboard",
+        action="store_true",
+        help="with auth: wait for the session cookie on the clipboard (macOS) "
+        "instead of prompting for a paste",
+    )
+    parser.add_argument(
         "--http",
         action="store_true",
         help="serve over streamable HTTP instead of stdio",
@@ -35,6 +41,8 @@ def main() -> None:
 
     if args.check and args.command != "auth":
         parser.error("--check only applies to the auth command")
+    if args.clipboard and (args.command != "auth" or args.check):
+        parser.error("--clipboard only applies to the auth command, without --check")
 
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 
@@ -46,7 +54,7 @@ def main() -> None:
     if args.command == "auth":
         from .auth import run_auth_flow
 
-        raise SystemExit(run_auth_flow())
+        raise SystemExit(run_auth_flow(clipboard=args.clipboard))
 
     from .server import mcp
 

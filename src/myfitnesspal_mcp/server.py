@@ -69,7 +69,7 @@ def parse_range(
 
 async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
     try:
-        return await asyncio.to_thread(op)
+        result = await asyncio.to_thread(op)
     except Exception as exc:
         if not mfp_client.is_auth_error(exc):
             raise
@@ -86,7 +86,8 @@ async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
                 message = f"{message} (retry after refresh failed: {retry_exc})"
             raise RuntimeError(message) from retry_exc
         await ctx.info("Session refreshed; the retried call succeeded.")
-        return result
+    await asyncio.to_thread(mfp_client.persist_session)
+    return result
 
 
 async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
