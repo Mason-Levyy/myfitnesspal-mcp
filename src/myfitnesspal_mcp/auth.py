@@ -142,7 +142,6 @@ def run_check() -> int:
     print(f"Session:      from {source}")
     try:
         client = mfp_client.build_client(load_cookies())
-        session_persistence.persist_session(client)
     except Exception as exc:
         print(f"Status:       rejected ({exc})")
         print(f"Auto-refresh: {auto_refresh_summary}")
@@ -155,6 +154,7 @@ def run_check() -> int:
             print(f"Fix: run '{AUTH_COMMAND}' with a fresh cookie.")
         return 1
 
+    session_persistence.persist_session(client)
     print(f"Status:       valid, connected as {client.effective_username}")
     print(f"Auto-refresh: {auto_refresh_summary}")
     if not client.session_renewed:

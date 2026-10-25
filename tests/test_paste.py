@@ -50,7 +50,7 @@ def test_hidden_prompt_takes_a_paste_longer_than_a_terminal_line():
     import termios
 
     controller, terminal = pty.openpty()
-    token = "t" * 1632  # macOS caps a canonical-mode line at 1024 bytes
+    token = "t" * 1632
     result = {}
     reader = threading.Thread(
         target=lambda: result.update(
