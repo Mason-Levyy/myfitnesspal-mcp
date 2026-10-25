@@ -151,6 +151,7 @@ def jar_client():
             session=SimpleNamespace(cookies=SimpleNamespace(jar=jar)),
             loaded_cookies=dict(loaded),
             saved_cookies=dict(loaded),
+            session_renewed=True,
             effective_username="tester",
         )
 

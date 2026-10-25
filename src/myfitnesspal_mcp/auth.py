@@ -1,23 +1,12 @@
-import getpass
 import json
 import os
-import re
-import subprocess
 import sys
 import tempfile
-import time
-from collections.abc import Callable
 
 from . import config
 
 SESSION_COOKIE = "__Secure-next-auth.session-token"
 AUTH_COMMAND = "uvx mfp-mcp auth"
-CLIPBOARD_POLL_SECONDS = 0.5
-CLIPBOARD_TIMEOUT_SECONDS = 300
-# NextAuth's session token is a ~1.6k-character JWE: base64url parts joined by dots.
-_TOKEN_SHAPE = re.compile(r"[A-Za-z0-9._-]{100,}")
-_RETURN_OR_CTRL_D = b"\r\n\x04"
-_BACKSPACE_OR_DELETE = b"\x08\x7f"
 
 INSTRUCTIONS = """\
 Connect your MyFitnessPal account
@@ -67,76 +56,32 @@ def saved_username() -> str | None:
 
 
 def save_cookies(cookies: dict[str, str], username: str | None = None) -> None:
-    """Several server processes save rotated sessions here, so the file is
-    replaced in one step and a process loading it never reads half of it.
-    mkstemp creates it 0600."""
+    """mkstemp (which creates the file 0600) + replace, so concurrent
+    processes never read a partial file."""
     saved = _read_saved()
     saved["cookies"] = cookies
     if username:
         saved["username"] = username
     path = config.cookies_path()
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".cookies-", suffix=".json")
+    descriptor, temp_path = tempfile.mkstemp(
+        dir=path.parent, prefix=".cookies-", suffix=".json"
+    )
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(json.dumps(saved, indent=2))
-        os.replace(tmp, path)
+        with os.fdopen(descriptor, "w") as handle:
+            handle.write(json.dumps(saved, indent=2))
+        os.replace(temp_path, path)
     except BaseException:
-        os.unlink(tmp)
+        os.unlink(temp_path)
         raise
 
 
 def read_cookie_paste() -> str:
+    from . import paste
+
     if sys.stdin.isatty():
-        return read_hidden_line("Paste cookie (input hidden): ")
+        return paste.read_hidden_line("Paste cookie (input hidden): ")
     print("(no terminal detected — reading the cookie from stdin)", file=sys.stderr)
     return sys.stdin.readline()
-
-
-def read_hidden_line(prompt: str, fd: int | None = None) -> str:
-    """getpass reads a canonical-mode line, which macOS caps at 1024 bytes
-    (MAX_CANON). The session token is ~1,600 characters, so a paste was cut
-    short, the Enter after it was dropped, and the prompt hung. Reading with
-    canonical mode off has no cap."""
-    try:
-        import termios
-    except ImportError:  # Windows: getpass reads key by key, with no line cap
-        return getpass.getpass(prompt)
-    fd = sys.stdin.fileno() if fd is None else fd
-    restore = termios.tcgetattr(fd)
-    raw = termios.tcgetattr(fd)
-    raw[3] &= ~(termios.ECHO | termios.ICANON)
-    raw[6][termios.VMIN], raw[6][termios.VTIME] = 1, 0
-    print(prompt, end="", file=sys.stderr, flush=True)
-    typed = bytearray()
-    termios.tcsetattr(fd, termios.TCSANOW, raw)
-    try:
-        while chunk := os.read(fd, 4096):
-            for byte in chunk:
-                if byte in _RETURN_OR_CTRL_D:
-                    return typed.decode(errors="replace")
-                if byte in _BACKSPACE_OR_DELETE:
-                    del typed[-1:]
-                else:
-                    typed.append(byte)
-        return typed.decode(errors="replace")
-    finally:
-        termios.tcsetattr(fd, termios.TCSAFLUSH, restore)
-        print(file=sys.stderr)
-
-
-def read_clipboard() -> str:
-    return subprocess.run(
-        ["pbpaste"], capture_output=True, text=True, check=True
-    ).stdout
-
-
-def clipboard_session(text: str) -> dict[str, str] | None:
-    """None unless `text` holds a session token, so whatever was copied
-    before (often the auth command itself) is never sent to MyFitnessPal."""
-    cookies = parse_cookie_input(text)
-    if _TOKEN_SHAPE.fullmatch(cookies.get(SESSION_COOKIE, "")):
-        return cookies
-    return None
 
 
 def _validate(cookies: dict[str, str]):
@@ -184,7 +129,7 @@ def auto_refresh_status() -> tuple[bool, str]:
 
 
 def run_check() -> int:
-    from . import mfp_client
+    from . import mfp_client, session_persistence
 
     source = session_source()
     auto_refresh_ready, auto_refresh_summary = auto_refresh_status()
@@ -197,9 +142,7 @@ def run_check() -> int:
     print(f"Session:      from {source}")
     try:
         client = mfp_client.build_client(load_cookies())
-        # Building the client renewed the session and may have rotated it; a
-        # saved copy left behind is what stops working.
-        mfp_client.persist_session(client)
+        session_persistence.persist_session(client)
     except Exception as exc:
         print(f"Status:       rejected ({exc})")
         print(f"Auto-refresh: {auto_refresh_summary}")
@@ -214,7 +157,7 @@ def run_check() -> int:
 
     print(f"Status:       valid, connected as {client.effective_username}")
     print(f"Auto-refresh: {auto_refresh_summary}")
-    if not getattr(client, "session_renewed", True):
+    if not client.session_renewed:
         print("Renewal:      MyFitnessPal didn't renew the session, so it will lapse")
         print(f"Fix: run '{AUTH_COMMAND}' with a fresh cookie.")
         return 1
@@ -224,7 +167,9 @@ def run_check() -> int:
 def run_auth_flow(clipboard: bool = False) -> int:
     print(INSTRUCTIONS, flush=True)
     if clipboard:
-        return auth_from_clipboard()
+        from . import paste
+
+        return paste.auth_from_clipboard()
     try:
         pasted = read_cookie_paste()
     except EOFError:
@@ -239,42 +184,9 @@ def run_auth_flow(clipboard: bool = False) -> int:
     return connect(parse_cookie_input(pasted))
 
 
-def auth_from_clipboard(
-    read: Callable[[], str] = read_clipboard,
-    timeout: float = CLIPBOARD_TIMEOUT_SECONDS,
-) -> int:
-    """The cookie never passes through the terminal, so its line cap and a
-    clipboard that still holds the command can't get in the way."""
-    print("Waiting for the cookie on your clipboard (Ctrl-C to stop)...", flush=True)
-    tried: set[str] = set()
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            cookies = clipboard_session(read())
-        except (OSError, subprocess.CalledProcessError) as exc:
-            print(
-                f"Can't read the clipboard ({exc}); run auth without "
-                "--clipboard and paste the cookie instead.",
-                file=sys.stderr,
-            )
-            return 1
-        if cookies and cookies[SESSION_COOKIE] not in tried:
-            tried.add(cookies[SESSION_COOKIE])
-            if connect(cookies) == 0:
-                return 0
-            print("Waiting for a different cookie on the clipboard...", flush=True)
-        time.sleep(CLIPBOARD_POLL_SECONDS)
-    print(
-        f"No working cookie reached the clipboard within {timeout / 60:.0f} minutes.",
-        file=sys.stderr,
-    )
-    return 1
-
-
 def connect(cookies: dict[str, str]) -> int:
-    """Saves the session MyFitnessPal returns, not the cookies given:
-    validating signs in again, which supersedes them."""
-    from . import mfp_client, refresh
+    """Validating signs in again, which supersedes the cookies given."""
+    from . import mfp_client, refresh, session_persistence
 
     print("Validating with MyFitnessPal...")
     try:
@@ -288,10 +200,8 @@ def connect(cookies: dict[str, str]) -> int:
         )
         return 1
 
-    session = mfp_client.session_cookies(client, cookies)
-    if SESSION_COOKIE not in session:
-        session = cookies
-    save_cookies(session, username=client.effective_username)
+    save_cookies(cookies, username=client.effective_username)
+    session_persistence.persist_session(client)
     mfp_client.reset()
     print(
         f"Connected as {client.effective_username}. Cookies saved to {config.cookies_path()}"
@@ -300,7 +210,7 @@ def connect(cookies: dict[str, str]) -> int:
     if refresh.available():
         print("Seeding the browser profile for automatic session refresh...")
         try:
-            refresh.seed_profile(session)
+            refresh.seed_profile(client.saved_cookies)
             print(f"Auto-refresh ready (profile at {refresh.profile_dir()}).")
         except Exception as exc:
             print(

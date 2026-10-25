@@ -86,7 +86,7 @@ async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
                 message = f"{message} (retry after refresh failed: {retry_exc})"
             raise RuntimeError(message) from retry_exc
         await ctx.info("Session refreshed; the retried call succeeded.")
-    await asyncio.to_thread(mfp_client.persist_session)
+    await asyncio.to_thread(mfp_client.persist_cached_session)
     return result
 
 

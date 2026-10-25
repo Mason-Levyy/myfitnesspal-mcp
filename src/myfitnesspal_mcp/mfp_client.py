@@ -7,7 +7,7 @@ import myfitnesspal
 from curl_cffi import requests as cffi_requests
 from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from . import auth, config, diary, entry_matching
+from . import auth, config, diary, entry_matching, session_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +15,6 @@ RECONNECT_HINT = (
     "MyFitnessPal session expired or not connected. "
     f"Re-run '{auth.AUTH_COMMAND}' or update MFP_COOKIE, then retry."
 )
-
-# Cloudflare's bot-check cookie belongs to the TLS session that earned it and
-# lasts 30 minutes, so a later process shouldn't send it.
-UNSAVED_COOKIES = frozenset({"__cf_bm"})
 SESSION_URL = "https://www.myfitnesspal.com/api/auth/session"
 
 
@@ -63,6 +59,9 @@ class CurlCffiClient(myfitnesspal.Client):
             impersonate=impersonate or config.impersonate()
         )
         self.session.cookies.update(cookiejar)
+        self.loaded_cookies: dict[str, str] = {}
+        self.saved_cookies: dict[str, str] = {}
+        self.session_renewed = True
         self._auth_data = self._get_auth_data()
         self._user_metadata = self._get_user_metadata()
 
@@ -124,74 +123,26 @@ def build_client(
     client = CurlCffiClient(
         cookies_to_jar(cookies), username=username, impersonate=impersonate
     )
-    client.loaded_cookies = client.saved_cookies = dict(cookies)
+    client.loaded_cookies = dict(cookies)
+    client.saved_cookies = dict(cookies)
     client.session_renewed = renew_session(client)
     return client
 
 
 def renew_session(client) -> bool:
-    """Reading the NextAuth session re-issues its cookie, good for another 30
-    days, as a browser does on every page load. Signing in through
-    remember_me never re-issues it, so without this even a session in daily
-    use lapses 30 days after it was pasted. False when MFP didn't renew it."""
+    """Signing in through remember_me never re-issues the session token;
+    reading the NextAuth session does, good for another 30 days."""
     try:
-        resp = client.session.get(SESSION_URL, headers={"Accept": "application/json"})
-        return bool(resp.json().get("expires"))
-    except Exception:
-        logger.warning("Couldn't renew the MyFitnessPal session", exc_info=True)
-        return False
-
-
-def session_cookies(client, loaded: dict[str, str]) -> dict[str, str]:
-    """What a browser keeps across a restart: cookies MFP set with an expiry,
-    plus loaded ones MFP left alone.
-
-    Building a client can sign in again through /account/login, which issues
-    a new session token and refresh token on every call, and renew_session
-    re-issues the session token. Kept only in memory, they left the next
-    process on a superseded login that MFP stopped accepting within about a
-    day. cookies_to_jar loads cookies as session cookies on .myfitnesspal.com,
-    which is how an untouched one is told apart from MFP's own sets."""
-    kept: dict[str, str] = {}
-    for cookie in client.session.cookies.jar:
-        if not cookie.domain.endswith("myfitnesspal.com"):
-            continue
-        if cookie.name in UNSAVED_COOKIES:
-            continue
-        untouched = (
-            cookie.expires is None
-            and cookie.domain.startswith(".")
-            and loaded.get(cookie.name) == cookie.value
+        response = client.session.get(
+            SESSION_URL, headers={"Accept": "application/json"}
         )
-        if untouched:
-            kept.setdefault(cookie.name, cookie.value)
-        elif cookie.expires is not None and not cookie.is_expired():
-            kept[cookie.name] = cookie.value
-    return kept
-
-
-def save_session(client) -> None:
-    """Skipped under MFP_COOKIE, since the file isn't read then."""
-    loaded = getattr(client, "loaded_cookies", None)
-    if loaded is None or config.cookie_env():
-        return
-    cookies = session_cookies(client, loaded)
-    if auth.SESSION_COOKIE not in cookies or cookies == client.saved_cookies:
-        return
-    auth.save_cookies(cookies)
-    client.saved_cookies = cookies
-
-
-def persist_session(client: CurlCffiClient | None = None) -> None:
-    """Logs a failed save instead of raising, so saving never fails the tool
-    call that rotated the session."""
-    client = client or _client
-    if client is None:
-        return
-    try:
-        save_session(client)
-    except Exception:
-        logger.warning("Couldn't save the rotated MyFitnessPal session", exc_info=True)
+        return bool(response.json().get("expires"))
+    except Exception as exc:
+        # The class name only: exception text could quote a cookie.
+        logger.warning(
+            "Couldn't renew the MyFitnessPal session (%s)", type(exc).__name__
+        )
+        return False
 
 
 _client: CurlCffiClient | None = None
@@ -208,8 +159,13 @@ def get_client() -> CurlCffiClient:
         _client = build_client(cookies)
     except Exception as exc:
         raise NotConnectedError(f"{RECONNECT_HINT} (auth failed: {exc})") from exc
-    persist_session(_client)
+    session_persistence.persist_session(_client)
     return _client
+
+
+def persist_cached_session() -> None:
+    if _client is not None:
+        session_persistence.persist_session(_client)
 
 
 def reset() -> None:
