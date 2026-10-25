@@ -75,8 +75,9 @@ mentioning `mfp-mcp auth` means step 2 didn't complete: run
 
 ## Optional: auto-refresh
 
-Sessions expire after about 30 days. To renew them automatically with a
-headless browser, use the `autorefresh` extra everywhere instead:
+The server renews the session whenever it's used, so it only expires after
+30 days without use. To also renew it with a headless browser when
+MyFitnessPal rejects it, use the `autorefresh` extra everywhere instead:
 
 ```bash
 uvx --from 'mfp-mcp[autorefresh]' playwright install chromium

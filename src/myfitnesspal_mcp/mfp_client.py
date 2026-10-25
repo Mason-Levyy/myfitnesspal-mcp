@@ -7,7 +7,7 @@ import myfitnesspal
 from curl_cffi import requests as cffi_requests
 from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from . import auth, config, diary, entry_matching
+from . import auth, config, diary, entry_matching, session_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ RECONNECT_HINT = (
     "MyFitnessPal session expired or not connected. "
     f"Re-run '{auth.AUTH_COMMAND}' or update MFP_COOKIE, then retry."
 )
+SESSION_URL = "https://www.myfitnesspal.com/api/auth/session"
 
 
 class NotConnectedError(RuntimeError):
@@ -58,6 +59,9 @@ class CurlCffiClient(myfitnesspal.Client):
             impersonate=impersonate or config.impersonate()
         )
         self.session.cookies.update(cookiejar)
+        self.loaded_cookies: dict[str, str] = {}
+        self.saved_cookies: dict[str, str] = {}
+        self.session_renewed = True
         self._auth_data = self._get_auth_data()
         self._user_metadata = self._get_user_metadata()
 
@@ -116,9 +120,29 @@ def build_client(
     username: str | None = None,
     impersonate: str | None = None,
 ) -> CurlCffiClient:
-    return CurlCffiClient(
+    client = CurlCffiClient(
         cookies_to_jar(cookies), username=username, impersonate=impersonate
     )
+    client.loaded_cookies = dict(cookies)
+    client.saved_cookies = dict(cookies)
+    client.session_renewed = renew_session(client)
+    return client
+
+
+def renew_session(client) -> bool:
+    """Signing in through remember_me never re-issues the session token;
+    reading the NextAuth session does, good for another 30 days."""
+    try:
+        response = client.session.get(
+            SESSION_URL, headers={"Accept": "application/json"}
+        )
+        return bool(response.json().get("expires"))
+    except Exception as exc:
+        # The class name only: exception text could quote a cookie.
+        logger.warning(
+            "Couldn't renew the MyFitnessPal session (%s)", type(exc).__name__
+        )
+        return False
 
 
 _client: CurlCffiClient | None = None
@@ -135,7 +159,13 @@ def get_client() -> CurlCffiClient:
         _client = build_client(cookies)
     except Exception as exc:
         raise NotConnectedError(f"{RECONNECT_HINT} (auth failed: {exc})") from exc
+    session_persistence.persist_session(_client)
     return _client
+
+
+def persist_cached_session() -> None:
+    if _client is not None:
+        session_persistence.persist_session(_client)
 
 
 def reset() -> None:

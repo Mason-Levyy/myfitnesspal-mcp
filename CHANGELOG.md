@@ -11,6 +11,38 @@ All notable changes to this project are documented here. The format follows
 - An icon, a website link and a clearer description in `server.json`, so the
   MCP Registry and the directories that mirror it show the server properly.
 - `glama.json`, so the Glama listing can be claimed from the repo.
+- `auth --clipboard` waits for the session cookie on the macOS clipboard and
+  connects as soon as you copy it, skipping anything that isn't a session
+  token (such as the command itself) and any token that doesn't authenticate.
+
+### Changed
+
+- `auth --check` renews the session as it checks and saves the cookie
+  MyFitnessPal re-issues, and exits 1 when MyFitnessPal won't renew the
+  session, so a scheduled check keeps an idle session alive and warns before
+  it lapses. Nothing to do on upgrade; scripts that read the exit code now
+  also see 1 for a session that is about to lapse.
+- `cookies.json` now also holds MyFitnessPal's long-lived remember-me cookies
+  next to the session token. The file's format is unchanged.
+
+### Fixed
+
+- Saved sessions no longer stop working within about a day. Building a
+  client can sign in again through `/account/login`, which issues a new
+  session token and refresh token on every call; the server kept them in
+  memory only, so `cookies.json` stayed on the pasted login and later
+  processes sent a superseded session until MyFitnessPal rejected it. Client
+  builds, tool calls, `auth`, and `auth --check` now save the cookies a
+  browser would keep whenever MyFitnessPal re-issues them.
+- Sessions no longer lapse 30 days after pasting. Signing in through the
+  remember-me cookie never re-issues the session token, so each client build
+  now reads `/api/auth/session`, which renews it for another 30 days.
+- Pasting the cookie into the `auth` prompt no longer hangs on macOS. The
+  prompt read a canonical-mode line, which macOS caps at 1024 bytes; the
+  session token is about 1,600 characters, so the paste was cut short and
+  Enter was dropped. The prompt now reads with canonical mode off.
+- `cookies.json` is replaced atomically, so a process loading it while
+  another saves never reads half a file.
 
 ## [0.4.3] - 2026-10-22
 

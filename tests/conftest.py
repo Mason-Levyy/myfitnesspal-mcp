@@ -1,4 +1,6 @@
+from http.cookiejar import Cookie
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -112,3 +114,45 @@ def store(tmp_path):
     from myfitnesspal_mcp.store import Store
 
     return Store(tmp_path / "test.db")
+
+
+@pytest.fixture
+def jar_client():
+    """Builds a client whose cookie jar looks the way curl_cffi leaves it after
+    a sign-in: the loaded cookies on .myfitnesspal.com, with MFP's own sets,
+    each (name, value, domain, expires), beside them."""
+    from myfitnesspal_mcp import mfp_client
+
+    def build(loaded, set_by_mfp=()):
+        jar = mfp_client.cookies_to_jar(loaded)
+        for name, value, domain, expires in set_by_mfp:
+            jar.set_cookie(
+                Cookie(
+                    version=0,
+                    name=name,
+                    value=value,
+                    port=None,
+                    port_specified=False,
+                    domain=domain,
+                    domain_specified=True,
+                    domain_initial_dot=domain.startswith("."),
+                    path="/",
+                    path_specified=True,
+                    secure=True,
+                    expires=expires,
+                    discard=expires is None,
+                    comment=None,
+                    comment_url=None,
+                    rest={},
+                    rfc2109=False,
+                )
+            )
+        return SimpleNamespace(
+            session=SimpleNamespace(cookies=SimpleNamespace(jar=jar)),
+            loaded_cookies=dict(loaded),
+            saved_cookies=dict(loaded),
+            session_renewed=True,
+            effective_username="tester",
+        )
+
+    return build

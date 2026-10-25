@@ -49,3 +49,25 @@ def test_friend_diary_date_url_keeps_friend_username():
 def test_is_auth_error_matches_expired_language():
     assert mfp_client.is_auth_error(RuntimeError("401 Unauthorized"))
     assert not mfp_client.is_auth_error(RuntimeError("no food found"))
+
+
+def test_renew_session_reports_whether_nextauth_renewed(client, make_response):
+    client.session.route(
+        "GET",
+        "api/auth/session",
+        make_response(json_data={"expires": "2026-11-23T22:46:52.744Z"}),
+    )
+    assert mfp_client.renew_session(client) is True
+
+    client.session.route("GET", "api/auth/session", make_response(json_data={}))
+    assert mfp_client.renew_session(client) is False
+
+
+def test_renew_session_logs_no_error_text(client, caplog):
+    def leak(url, **kwargs):
+        raise RuntimeError("Cookie: __Secure-next-auth.session-token=secret")
+
+    client.session.get = leak
+    assert mfp_client.renew_session(client) is False
+    assert "RuntimeError" in caplog.text
+    assert "secret" not in caplog.text

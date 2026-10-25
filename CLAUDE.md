@@ -47,8 +47,10 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   lives in `mfp_web.py`, and matching a query to logged entries, shared by
   food and exercise deletes, lives in `entry_matching.py`.
 - `mfp_client.py` holds the `curl_cffi` client, the cached instance, and
-  `is_auth_error`. `auth.py` captures and stores cookies, `refresh.py` renews
-  the session in a headless browser, and `config.py` reads env vars and paths.
+  `is_auth_error`. `auth.py` captures and stores cookies, `paste.py` reads a
+  pasted or copied cookie, `session_persistence.py` saves the cookies MFP
+  re-issues back to `cookies.json`, `refresh.py` renews the session in a
+  headless browser, and `config.py` reads env vars and paths.
 - `store.py` is the local SQLite cache, and all SQL lives there. `sync.py`
   gap-fills the cache from MFP.
 
