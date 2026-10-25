@@ -1,5 +1,8 @@
 import json
 import sys
+import time
+from http.cookiejar import CookieJar
+from types import SimpleNamespace
 
 import pytest
 from myfitnesspal.exceptions import MyfitnesspalLoginError
@@ -56,6 +59,12 @@ def test_load_nothing(tmp_path, monkeypatch):
 
 class FakeConnectedClient:
     effective_username = "tester"
+
+    def __init__(self):
+        self.session = SimpleNamespace(cookies=SimpleNamespace(jar=CookieJar()))
+        self.loaded_cookies = {}
+        self.saved_cookies = {}
+        self.session_renewed = True
 
 
 @pytest.fixture
@@ -143,3 +152,64 @@ def test_username_env_override(tmp_path, monkeypatch):
     auth.save_cookies({"a": "1"}, username="fromfile")
     monkeypatch.setenv("MFP_USERNAME", "fromenv")
     assert auth.saved_username() == "fromenv"
+
+
+def rotating_build(jar_client):
+    later = int(time.time()) + 86400
+    return lambda cookies: jar_client(
+        cookies, [(auth.SESSION_COOKIE, "rotated", "www.myfitnesspal.com", later)]
+    )
+
+
+def test_check_saves_the_session_mfp_rotated(check_env, monkeypatch, jar_client):
+    auth.save_cookies({auth.SESSION_COOKIE: "token"}, username="tester")
+    monkeypatch.setattr(mfp_client, "build_client", rotating_build(jar_client))
+
+    assert auth.run_check() == 0
+    assert json.loads(check_env.read_text()) == {
+        "cookies": {auth.SESSION_COOKIE: "rotated"},
+        "username": "tester",
+    }
+
+
+def test_check_flags_a_session_mfp_would_not_renew(check_env, monkeypatch, capsys):
+    auth.save_cookies({auth.SESSION_COOKIE: "token"})
+    lapsing = FakeConnectedClient()
+    lapsing.session_renewed = False
+    monkeypatch.setattr(mfp_client, "build_client", lambda cookies: lapsing)
+
+    assert auth.run_check() == 1
+    assert "didn't renew" in capsys.readouterr().out
+
+
+def test_connect_saves_the_session_mfp_returned_not_the_paste(
+    check_env, monkeypatch, jar_client, capsys
+):
+    monkeypatch.setattr(mfp_client, "build_client", rotating_build(jar_client))
+
+    assert auth.connect({auth.SESSION_COOKIE: "pasted"}) == 0
+    assert json.loads(check_env.read_text()) == {
+        "cookies": {auth.SESSION_COOKIE: "rotated"},
+        "username": "tester",
+    }
+    assert "Connected as tester" in capsys.readouterr().out
+
+
+def test_clipboard_flag_reaches_the_auth_flow(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        auth, "run_auth_flow", lambda clipboard=False: calls.append(clipboard) or 0
+    )
+    monkeypatch.setattr(sys, "argv", ["myfitnesspal-mcp", "auth", "--clipboard"])
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+    assert exit_info.value.code == 0
+    assert calls == [True]
+
+
+def test_clipboard_flag_needs_auth_without_check(monkeypatch):
+    for args in (["serve", "--clipboard"], ["auth", "--check", "--clipboard"]):
+        monkeypatch.setattr(sys, "argv", ["myfitnesspal-mcp", *args])
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main()
+        assert exit_info.value.code == 2

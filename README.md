@@ -133,12 +133,17 @@ This server signs in with your browser's MyFitnessPal session cookie:
 2. Open DevTools (F12) → **Application** (Chrome) or **Storage** (Firefox) →
    **Cookies** → `https://www.myfitnesspal.com`
 3. Copy the value of `__Secure-next-auth.session-token`
-4. Paste it into the `mfp-mcp auth` prompt
+4. Paste it into the `mfp-mcp auth` prompt, or on macOS run
+   `mfp-mcp auth --clipboard` and copy the cookie: it connects as soon as
+   the token reaches the clipboard
 
-Sessions last around 30 days. When one expires, either re-run `auth` or
-enable auto-refresh so you never have to. `mfp-mcp auth --check` reports
-whether the saved session still works and whether auto-refresh is set up,
-without prompting or changing anything.
+Sessions last 30 days from their last renewal. The server renews the session
+whenever it builds a client and saves the cookies MyFitnessPal re-issues, so
+the saved session stays current as long as it's used at least once a month.
+`mfp-mcp auth --check` reports whether the saved session still works and
+whether auto-refresh is set up; it renews and saves the session as it checks
+and exits 1 when the session needs attention, so running it on a schedule
+(cron, launchd) keeps an idle session alive and warns before it lapses.
 
 ### Auto-refresh (recommended)
 

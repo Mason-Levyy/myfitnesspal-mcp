@@ -1,6 +1,7 @@
-import getpass
 import json
+import os
 import sys
+import tempfile
 
 from . import config
 
@@ -55,18 +56,30 @@ def saved_username() -> str | None:
 
 
 def save_cookies(cookies: dict[str, str], username: str | None = None) -> None:
+    """mkstemp (which creates the file 0600) + replace, so concurrent
+    processes never read a partial file."""
     saved = _read_saved()
     saved["cookies"] = cookies
     if username:
         saved["username"] = username
     path = config.cookies_path()
-    path.write_text(json.dumps(saved, indent=2))
-    path.chmod(0o600)
+    descriptor, temp_path = tempfile.mkstemp(
+        dir=path.parent, prefix=".cookies-", suffix=".json"
+    )
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            handle.write(json.dumps(saved, indent=2))
+        os.replace(temp_path, path)
+    except BaseException:
+        os.unlink(temp_path)
+        raise
 
 
 def read_cookie_paste() -> str:
+    from . import paste
+
     if sys.stdin.isatty():
-        return getpass.getpass("Paste cookie (input hidden): ")
+        return paste.read_hidden_line("Paste cookie (input hidden): ")
     print("(no terminal detected — reading the cookie from stdin)", file=sys.stderr)
     return sys.stdin.readline()
 
@@ -116,7 +129,7 @@ def auto_refresh_status() -> tuple[bool, str]:
 
 
 def run_check() -> int:
-    from . import mfp_client
+    from . import mfp_client, session_persistence
 
     source = session_source()
     auto_refresh_ready, auto_refresh_summary = auto_refresh_status()
@@ -141,15 +154,22 @@ def run_check() -> int:
             print(f"Fix: run '{AUTH_COMMAND}' with a fresh cookie.")
         return 1
 
+    session_persistence.persist_session(client)
     print(f"Status:       valid, connected as {client.effective_username}")
     print(f"Auto-refresh: {auto_refresh_summary}")
+    if not client.session_renewed:
+        print("Renewal:      MyFitnessPal didn't renew the session, so it will lapse")
+        print(f"Fix: run '{AUTH_COMMAND}' with a fresh cookie.")
+        return 1
     return 0
 
 
-def run_auth_flow() -> int:
-    from . import mfp_client, refresh
-
+def run_auth_flow(clipboard: bool = False) -> int:
     print(INSTRUCTIONS, flush=True)
+    if clipboard:
+        from . import paste
+
+        return paste.auth_from_clipboard()
     try:
         pasted = read_cookie_paste()
     except EOFError:
@@ -161,8 +181,13 @@ def run_auth_flow() -> int:
             file=sys.stderr,
         )
         return 1
+    return connect(parse_cookie_input(pasted))
 
-    cookies = parse_cookie_input(pasted)
+
+def connect(cookies: dict[str, str]) -> int:
+    """Validating signs in again, which supersedes the cookies given."""
+    from . import mfp_client, refresh, session_persistence
+
     print("Validating with MyFitnessPal...")
     try:
         client = _validate(cookies)
@@ -176,6 +201,7 @@ def run_auth_flow() -> int:
         return 1
 
     save_cookies(cookies, username=client.effective_username)
+    session_persistence.persist_session(client)
     mfp_client.reset()
     print(
         f"Connected as {client.effective_username}. Cookies saved to {config.cookies_path()}"
@@ -184,7 +210,7 @@ def run_auth_flow() -> int:
     if refresh.available():
         print("Seeding the browser profile for automatic session refresh...")
         try:
-            refresh.seed_profile(cookies)
+            refresh.seed_profile(client.saved_cookies)
             print(f"Auto-refresh ready (profile at {refresh.profile_dir()}).")
         except Exception as exc:
             print(
