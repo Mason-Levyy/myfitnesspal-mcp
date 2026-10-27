@@ -125,15 +125,26 @@ CHILI = {
 RECIPES_API = {"items": [CHILI]}
 
 
-def my_foods_tab(*names):
+def my_foods_tab(*names, first=0):
     rows = "".join(
         f'<tr class="favorite"><td><input name="favorites[{n}][food_id]" '
         f'type="hidden" value="{600 + n}" /></td><td>{name}</td>'
         f'<td><select name="favorites[{n}][weight_id]">'
         f'<option value="{6000 + n}">1 cup</option></select></td></tr>'
-        for n, name in enumerate(names)
+        for n, name in enumerate(names, start=first)
     )
     return f"<table><tbody>{rows}</tbody></table>"
+
+
+def paged(*pages):
+    """A tab route that serves pages in order by their page param, then empty
+    pages, as MFP does past the last one."""
+
+    def serve(calls):
+        page = int(calls[-1][2]["params"]["page"])
+        return FakeResponse(text=pages[page - 1] if page <= len(pages) else "")
+
+    return serve
 
 
 def my_food(food_id, brand, description, calories):
@@ -153,7 +164,7 @@ def library(client):
         session.route(
             "GET",
             f"food/load_{tab}",
-            FakeResponse(text=(FIXTURES / f"favorites_{tab}.html").read_text()),
+            paged((FIXTURES / f"favorites_{tab}.html").read_text()),
         )
     session.route(
         "GET", "api/services/users/foods/mine", FakeResponse(json_data=MY_FOODS_API)

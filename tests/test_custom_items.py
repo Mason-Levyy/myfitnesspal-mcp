@@ -9,6 +9,7 @@ from conftest import (
     diary_after_add,
     my_food,
     my_foods_tab,
+    paged,
 )
 
 from myfitnesspal_mcp import custom_items, diary, mfp_client, mfp_web, server
@@ -124,8 +125,8 @@ def test_list_custom_filters_by_kind_and_query(library):
         "Morning smoothie",
         "Smoothie, large",
     ]
-    tabs = [(m, url) for m, url, _ in library.session.calls if "food/load_" in url]
-    assert tabs == [("GET", "https://www.myfitnesspal.com/food/load_meals")]
+    tabs = {(m, url) for m, url, _ in library.session.calls if "food/load_" in url}
+    assert tabs == {("GET", "https://www.myfitnesspal.com/food/load_meals")}
     assert not [call for call in library.session.calls if call[0] == "POST"]
 
 
@@ -152,6 +153,36 @@ def test_tab_requests_never_follow_redirects(library):
     custom_items.list_custom(library, kind="foods")
     tab_kwargs = [kw for m, url, kw in library.session.calls if "food/load_" in url]
     assert tab_kwargs[0]["allow_redirects"] is False
+
+
+def test_list_custom_reads_foods_past_the_first_page(library):
+    library.session.route(
+        "GET",
+        "food/load_my_foods",
+        paged(my_foods_tab("Oats"), my_foods_tab("Cowboy Chili", first=25)),
+    )
+    items = custom_items.list_custom(library, kind="foods")["items"]
+    assert [item["name"] for item in items] == ["Oats", "Cowboy Chili"]
+
+
+def test_log_custom_logs_a_food_from_a_later_page(library):
+    library.session.route(
+        "GET",
+        "food/load_my_foods",
+        paged(my_foods_tab("Oats"), my_foods_tab("Cowboy Chili", first=25)),
+    )
+    custom_items.log_custom(library, TODAY, "dinner", "Cowboy Chili", kind="foods")
+    assert food_adds(library)[0][2]["data"]["food_entry[food_id]"] == "625"
+
+
+def test_tab_reading_stops_when_mfp_ignores_the_page_number(library):
+    library.session.route(
+        "GET", "food/load_my_foods", FakeResponse(text=my_foods_tab("Oats"))
+    )
+    items = custom_items.list_custom(library, kind="foods")["items"]
+    tab_calls = [url for _, url, _ in library.session.calls if "load_my_foods" in url]
+    assert [item["name"] for item in items] == ["Oats"]
+    assert len(tab_calls) == 2
 
 
 def test_list_custom_survives_a_failing_detail_api(library, make_response, caplog):

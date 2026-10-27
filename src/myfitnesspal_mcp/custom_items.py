@@ -25,6 +25,7 @@ KINDS = {"foods": "food", "meals": "meal", "recipes": "recipe"}
 TABS = {"foods": "my_foods", "meals": "meals", "recipes": "recipes"}
 
 MAX_RECIPE_PAGES = 50
+MAX_TAB_PAGES = 40
 LISTED_NAMES_LIMIT = 15
 
 
@@ -117,12 +118,12 @@ def _tab_row(tr, kind: str) -> dict | None:
     }
 
 
-def tab_rows(client, kind: str) -> list[dict]:
+def _tab_page(client, kind: str, page: int) -> list[dict]:
     # A POST, or a request MFP won't serve, is answered with a 302 to the login
     # page. Following it yields a page with no rows, which reads as "no items".
     resp = client.session.get(
         site_url(client, f"food/load_{TABS[kind]}"),
-        params={"meal": "0", "page": "1"},
+        params={"meal": "0", "page": str(page)},
         headers=api_headers(client),
         allow_redirects=False,
     )
@@ -136,6 +137,22 @@ def tab_rows(client, kind: str) -> list[dict]:
         return []
     rows = lh.fromstring(resp.text).xpath("//tr[contains(@class, 'favorite')]")
     return [row for row in (_tab_row(tr, kind) for tr in rows) if row]
+
+
+def tab_rows(client, kind: str) -> list[dict]:
+    """Every row of a tab. MFP shows 25 rows a page, so a 26th food is on page 2,
+    and the page after the last one comes back empty."""
+    rows, seen = [], set()
+    for page in range(1, MAX_TAB_PAGES + 1):
+        new = [
+            row for row in _tab_page(client, kind, page) if row["food_id"] not in seen
+        ]
+        # a page with nothing new also stops a server that ignores the page number
+        if not new:
+            break
+        seen.update(row["food_id"] for row in new)
+        rows.extend(new)
+    return rows
 
 
 def _food_details(client) -> list[tuple[str, dict]]:
