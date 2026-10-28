@@ -204,6 +204,11 @@ def _recipe_line(client, ingredient: dict) -> dict:
     if not sizes:
         raise InvalidItem(f"food {external_id} has no serving sizes to measure it by")
     chosen = _ingredient_serving(external_id, sizes, ingredient.get("serving"))
+    quantity = ingredient.get("quantity", 1)
+    if not quantity > 0:
+        raise ValueError(
+            f"ingredient {external_id} quantity must be above 0, not {quantity}"
+        )
     return {
         "food": {"id": food["id"], "version": food["version"]},
         "serving_size": {
@@ -211,7 +216,7 @@ def _recipe_line(client, ingredient: dict) -> dict:
             "unit": chosen["unit"],
             "nutrition_multiplier": chosen["nutrition_multiplier"],
         },
-        "servings": ingredient.get("quantity", 1),
+        "servings": quantity,
     }
 
 

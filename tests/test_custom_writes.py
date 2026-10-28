@@ -282,6 +282,19 @@ def test_create_recipe_refuses_a_duplicate_name(recipe_api):
         )
 
 
+def test_create_recipe_refuses_an_ingredient_quantity_that_is_not_positive(
+    recipe_api,
+):
+    with pytest.raises(ValueError, match="quantity must be above 0"):
+        custom_writes.create_recipe(
+            recipe_api,
+            "Bread",
+            1,
+            [{"external_id": "999", "serving": "cup", "quantity": 0}],
+        )
+    assert not posts(recipe_api, "v2/recipes")
+
+
 def test_create_recipe_needs_ingredients_and_servings(client):
     with pytest.raises(ValueError, match="at least one ingredient"):
         custom_writes.create_recipe(client, "Empty", 2, [])
