@@ -300,11 +300,11 @@ async def fitness_list_custom(
     """List your own MyFitnessPal items: custom foods ("My Foods"), saved meals
     and recipes. None of them show up in fitness_search_food.
 
-    kind: all | foods | meals | recipes. query: optional case-insensitive
-    name filter. Each item has kind, name, food_id and servings
-    [{weight_id, serving}] (these ids also work with fitness_log_food), plus
-    nutrition; meals also list their ingredients, recipes their recipe_id and
-    per-serving nutrition. If nutrition could not be read, or several items
+    kind: all | food | meal | recipe (plural forms also work). query:
+    optional case-insensitive name filter. Each item has kind, name, food_id
+    and servings [{weight_id, serving}] (these ids also work with
+    fitness_log_food), plus nutrition; meals also list their ingredients,
+    recipes their recipe_id and per-serving nutrition. If nutrition could not be read, or several items
     share a name, `warnings` says so and names and ids still work. To log one
     by name, use fitness_log_custom.
     """
@@ -330,7 +330,8 @@ async def fitness_log_custom(
     name: the item's name as fitness_list_custom shows it (a unique part of it
     works). A saved meal is logged as its ingredients. serving: one of the
     item's servings by name (default: its first). quantity: how many servings.
-    kind: all | foods | meals | recipes, to narrow the name match.
+    kind: all | food | meal | recipe (plural forms also work), to narrow
+    the name match. quantity must be above 0.
     meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
     on the account. date: YYYY-MM-DD (default: today).
     `added_entries` lists the diary entries MyFitnessPal actually added.

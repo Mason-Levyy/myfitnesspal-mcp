@@ -315,6 +315,9 @@ def _listed_names(pool: list[dict]) -> str:
 
 
 def pick(items: list[dict], name: str, *, exact_only: bool = False) -> dict:
+    if not name.strip():
+        # an empty name would partial-match every item
+        raise NoSuchItem(f"name is required; pick one from: {_listed_names(items)}")
     found = matching(items, name, "name", exact_only=exact_only)
     if len(found) == 1:
         return found[0]
@@ -358,6 +361,8 @@ def log_custom(
     quantity: float = 1.0,
     serving: str | None = None,
 ) -> dict:
+    if not quantity > 0:
+        raise ValueError(f"quantity must be above 0, not {quantity}")
     rows = [row for plural in kinds(kind) for row in tab_rows(client, plural)]
     item = pick(rows, name)
     chosen = chosen_serving(item, serving)

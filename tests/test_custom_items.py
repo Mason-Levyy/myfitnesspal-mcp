@@ -311,6 +311,19 @@ def test_log_custom_unknown_name_lists_what_exists(library):
         custom_items.log_custom(library, TODAY, "dinner", "lasagna", kind="recipes")
 
 
+def test_log_custom_refuses_an_empty_name(library):
+    # an empty name would partial-match every item and log the only one
+    with pytest.raises(custom_items.NoSuchItem, match="name is required"):
+        custom_items.log_custom(library, TODAY, "lunch", " ", kind="meals")
+    assert not [c for c in library.session.calls if c[0] == "POST"]
+
+
+def test_log_custom_refuses_a_quantity_that_is_not_positive(library):
+    with pytest.raises(ValueError, match="quantity must be above 0"):
+        custom_items.log_custom(library, TODAY, "lunch", "Turkey Chili", quantity=0)
+    assert not [c for c in library.session.calls if c[0] == "POST"]
+
+
 def test_no_such_item_never_triggers_a_session_refresh():
     assert not mfp_client.is_auth_error(
         custom_items.NoSuchItem("nothing matches 'session smoothie'")
