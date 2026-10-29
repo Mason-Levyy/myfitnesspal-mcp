@@ -2,6 +2,7 @@ from dataclasses import asdict
 from datetime import date
 
 from . import diary, food_search
+from .entry_matching import DiaryLookupError
 from .food_ranking import MacroTargets, normalize_query, rank_candidates
 
 DEFAULT_MEAL = "breakfast"
@@ -9,6 +10,24 @@ DEFAULT_MEAL = "breakfast"
 
 class DraftNotFound(RuntimeError):
     pass
+
+
+class NothingLogged(DiaryLookupError):
+    pass
+
+
+class UnverifiedAdd(DiaryLookupError):
+    """The POST to /food/add went through, but the diary could not be read back.
+    A DiaryLookupError so that the auth retry never re-posts the food."""
+
+
+def _added_entries(before_doc, after_doc) -> list[dict]:
+    before = {entry["entry_id"] for entry in diary.diary_entries(before_doc)}
+    return [
+        {"meal": entry["meal"], "name": entry["name"]}
+        for entry in diary.diary_entries(after_doc)
+        if entry["entry_id"] not in before
+    ]
 
 
 def _pinned_serving(pin: dict) -> dict:
@@ -168,6 +187,7 @@ def log_exact(
     quantity: float,
     page: tuple | None = None,
 ) -> dict:
+    page = page or diary.diary_page(client, day)
     diary.push_food(
         client,
         day,
@@ -177,8 +197,33 @@ def log_exact(
         quantity=quantity,
         page=page,
     )
+    # /food/add answers 200 for any food_id/weight_id: one that belongs to another
+    # food logs that food, and one that matches nothing logs nothing. Reading the
+    # diary back is the only way to know what was added.
+    try:
+        after, _ = diary.diary_page(client, day)
+    except Exception as exc:
+        # The food may already be in the diary. An auth-class error here would
+        # make run_with_refresh re-run the whole op and post /food/add again, so
+        # raise an error the refresh never retries. The message must not hold
+        # words the auth regex matches.
+        raise UnverifiedAdd(
+            f"MyFitnessPal accepted {food['name']!r} for {meal} on "
+            f"{day.isoformat()}, but the diary could not be read back to check "
+            f"it ({type(exc).__name__}). Look at the day with fitness_get_day "
+            "before logging it again, or it may be added twice."
+        ) from exc
+    added = _added_entries(page[0], after)
+    if not added:
+        raise NothingLogged(
+            f"MyFitnessPal accepted {food['name']!r} (food_id {food['food_id']}, "
+            f"weight_id {food['weight_id']}) but added no entry on "
+            f"{day.isoformat()}. Check the ids with fitness_search_food or "
+            "fitness_draft_food and log again."
+        )
     return {
         "logged": food["name"],
+        "added_entries": added,
         "food_id": food["food_id"],
         "weight_id": food["weight_id"],
         "serving": food.get("serving"),
@@ -307,6 +352,18 @@ def log_by_query(
     return {"logged": None, "needs_choice": True, **_draft_view(draft_id, body)}
 
 
+def _replace(removed: dict, log_replacement) -> dict:
+    try:
+        added = log_replacement()
+    except NothingLogged as exc:
+        raise NothingLogged(
+            f"Removed {removed['removed']!r} from {removed['meal']}, but the "
+            f"replacement did not log: {exc} {removed['removed']!r} is no longer "
+            "in the diary; log it again to restore it."
+        ) from exc
+    return {"removed": removed["removed"], **added}
+
+
 def modify_food(
     client,
     store,
@@ -325,18 +382,20 @@ def modify_food(
             raise ValueError("option is required with draft_id")
         page = diary.diary_page(client, day)
         removed = diary.delete_food(client, day, query, meal, page=page)
-        added = log_from_draft(
-            client,
-            store,
-            draft_id,
-            option,
-            serving=serving,
-            quantity=quantity,
-            meal=meal,
-            day=day,
-            page=page,
+        return _replace(
+            removed,
+            lambda: log_from_draft(
+                client,
+                store,
+                draft_id,
+                option,
+                serving=serving,
+                quantity=quantity,
+                meal=meal,
+                day=day,
+                page=page,
+            ),
         )
-        return {"removed": removed["removed"], **added}
     replacement_query = new_query or query
     chosen_quantity = 1.0 if quantity is None else quantity
     food, search_results = _unambiguous_food(client, store, replacement_query)
@@ -364,5 +423,8 @@ def modify_food(
         }
     page = diary.diary_page(client, day)
     removed = diary.delete_food(client, day, query, meal, page=page)
-    added = log_exact(client, food, day, meal, quantity=chosen_quantity, page=page)
-    return {"removed": removed["removed"], **added, "source": food["source"]}
+    result = _replace(
+        removed,
+        lambda: log_exact(client, food, day, meal, quantity=chosen_quantity, page=page),
+    )
+    return {**result, "source": food["source"]}

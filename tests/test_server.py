@@ -173,7 +173,8 @@ def test_log_food_with_explicit_ids(connected):
         )
     )
     assert result["source"] == "ids"
-    _, _, kwargs = connected.session.calls[-1]
+    adds = [c for c in connected.session.calls if c[0] == "POST" and "food/add" in c[1]]
+    _, _, kwargs = adds[-1]
     assert kwargs["data"]["food_entry[weight_id]"] == "20"
 
 
@@ -313,6 +314,7 @@ def test_tools_that_remove_or_overwrite_are_marked_destructive():
         "fitness_delete_food",
         "fitness_delete_exercise",
         "fitness_modify_food",
+        "fitness_delete_custom",
     ]:
         assert tools[name].annotations.destructiveHint, name
     assert not tools["fitness_log_food"].annotations.destructiveHint
