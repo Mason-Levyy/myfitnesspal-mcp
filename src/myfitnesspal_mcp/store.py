@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     water_ml REAL,
     weight REAL,
     goal_calories REAL,
-    diary_synced INTEGER NOT NULL DEFAULT 0
+    diary_synced INTEGER NOT NULL DEFAULT 0,
+    goal_protein REAL,
+    goal_carbs REAL,
+    goal_fat REAL
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +73,23 @@ NUTRITION_FIELDS = (
     "water_ml",
     "weight",
     "goal_calories",
+    "goal_protein",
+    "goal_carbs",
+    "goal_fat",
 )
+
+GOAL_COLUMNS = {
+    "calories": "goal_calories",
+    "protein": "goal_protein",
+    "carbs": "goal_carbs",
+    "fat": "goal_fat",
+}
+
+ADDED_NUTRITION_COLUMNS = {
+    "goal_protein": "REAL",
+    "goal_carbs": "REAL",
+    "goal_fat": "REAL",
+}
 
 TREND_COLUMNS = {
     "weight": "weight",
@@ -141,6 +160,12 @@ class Store:
                 "OR goal_calories IS NOT NULL"
             )
             self.conn.commit()
+        for column, sql_type in ADDED_NUTRITION_COLUMNS.items():
+            if column not in columns:
+                self.conn.execute(
+                    f"ALTER TABLE day_nutrition ADD COLUMN {column} {sql_type}"
+                )
+                self.conn.commit()
 
     @_serialized
     def upsert_nutrition(self, day: str, **fields) -> None:
@@ -267,10 +292,31 @@ class Store:
         return [dict(r) for r in rows]
 
     @_serialized
+    def goals(self, day: str) -> dict:
+        row = self.conn.execute(
+            f"SELECT {', '.join(GOAL_COLUMNS.values())} FROM day_nutrition "
+            "WHERE day = ?",
+            (day,),
+        ).fetchone()
+        return {
+            name: (row[column] if row is not None else None)
+            for name, column in GOAL_COLUMNS.items()
+        }
+
+    @_serialized
     def day_record(self, day: str) -> dict:
+        nutrition = self.nutrition(day)
+        goals = self.goals(day)
+        logged = nutrition or {}
+        remaining = {
+            name: None if goal is None else round(goal - (logged.get(name) or 0.0), 1)
+            for name, goal in goals.items()
+        }
         return {
             "day": day,
-            "nutrition": self.nutrition(day),
+            "nutrition": nutrition,
+            "goals": goals,
+            "remaining": remaining,
             "diary": self.diary(day),
             "note": self.note(day),
             "feel": self.feel(day),

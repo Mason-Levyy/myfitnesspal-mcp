@@ -66,6 +66,9 @@ def refresh_day(store: Store, client, day: date) -> None:
         **macros(mfp_day.totals),
         water_ml=as_float(mfp_day.water),
         goal_calories=first_number(mfp_day.goals or {}, "calories"),
+        goal_protein=first_number(mfp_day.goals or {}, "protein"),
+        goal_carbs=first_number(mfp_day.goals or {}, "carbohydrates", "carbs"),
+        goal_fat=first_number(mfp_day.goals or {}, "fat"),
     )
 
     store.replace_diary(
