@@ -7,6 +7,8 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
 from . import (
+    custom_items,
+    custom_writes,
     diary,
     exercise,
     food_logging,
@@ -137,6 +139,7 @@ async def fitness_search_food(
 
     Each candidate has name, brand, calories, macros, serving, and the
     food_id + weight_id to pass to fitness_log_food to log exactly that item.
+    external_id is the id fitness_create_custom takes for a recipe ingredient.
     """
 
     def op(store, client):
@@ -231,6 +234,13 @@ async def fitness_log_food(
     to pick from. With food_id + weight_id (from fitness_search_food): logs
     exactly that item, `query` being its display name.
 
+    A logged result lists `added_entries` (meal, name): what MyFitnessPal
+    actually put in the diary. MyFitnessPal accepts any food_id, so if the
+    names are not the food you meant, delete them. An error saying no entry
+    was added means nothing was logged. An error saying the diary could not
+    be read back means the food may be logged: check with fitness_get_day
+    before logging it again.
+
     meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
     on the account. quantity: number of servings (default 1).
     date: YYYY-MM-DD (default today).
@@ -283,6 +293,118 @@ async def fitness_log_food(
         **refresh_warning,
         "day": get_store().day_record(result["date"]),
     }
+
+
+@mcp.tool(title="List your custom items", annotations=READS_MFP)
+async def fitness_list_custom(
+    kind: str = "all", query: str | None = None, ctx: Context = None
+) -> dict:
+    """List your own MyFitnessPal items: custom foods ("My Foods"), saved meals
+    and recipes. None of them show up in fitness_search_food.
+
+    kind: all | food | meal | recipe (plural forms also work). query:
+    optional case-insensitive name filter. Each item has kind, name, food_id
+    and servings [{weight_id, serving}] (these ids also work with
+    fitness_log_food), plus nutrition; meals also list their ingredients,
+    recipes their recipe_id and per-serving nutrition. If nutrition could not be read, or several items
+    share a name, `warnings` says so and names and ids still work. To log one
+    by name, use fitness_log_custom.
+    """
+
+    def op(store, client):
+        return custom_items.list_custom(client, kind, query)
+
+    return await with_session(ctx, op)
+
+
+@mcp.tool(title="Log a custom item", annotations=ADDS_TO_MFP)
+async def fitness_log_custom(
+    name: str,
+    meal: str = food_logging.DEFAULT_MEAL,
+    quantity: float = 1.0,
+    serving: str | None = None,
+    kind: str = "all",
+    date: str | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Log one of your custom foods, saved meals or recipes by name.
+
+    name: the item's name as fitness_list_custom shows it (a unique part of it
+    works). A saved meal is logged as its ingredients. serving: one of the
+    item's servings by name (default: its first). quantity: how many servings.
+    kind: all | food | meal | recipe (plural forms also work), to narrow
+    the name match. quantity must be above 0.
+    meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
+    on the account. date: YYYY-MM-DD (default: today).
+    `added_entries` lists the diary entries MyFitnessPal actually added.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return custom_items.log_custom(
+            client, day, meal, name, kind=kind, quantity=quantity, serving=serving
+        )
+
+    result = await with_session(ctx, op)
+    return {
+        "ok": True,
+        **result,
+        **await refresh_after_write(ctx, day),
+        "day": get_store().day_record(day.isoformat()),
+    }
+
+
+@mcp.tool(title="Create a custom item", annotations=ADDS_TO_MFP)
+async def fitness_create_custom(
+    kind: str,
+    name: str,
+    nutrition: dict | None = None,
+    brand: str | None = None,
+    serving_size: float | None = None,
+    serving_unit: str | None = None,
+    servings: float | None = None,
+    ingredients: list[dict] | None = None,
+    meal: str | None = None,
+    date: str | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Create a private custom food, saved meal or recipe in MyFitnessPal. Log
+    it afterwards with fitness_log_custom. Refuses a meal or recipe name that
+    already exists, and arguments that don't apply to `kind`. kind: food |
+    meal | recipe (plural forms also work).
+
+    kind=food: nutrition {calories, protein, carbs, fat, and optionally fiber,
+    sugar, sodium, saturated_fat} in grams (sodium in mg) for one serving of
+    serving_size x serving_unit (default 1 x "serving", e.g. 1 x "bar").
+    brand is optional.
+    kind=meal: saves what is logged in `meal` (breakfast|lunch|dinner|snacks
+    or any meal name on the account) on `date` (YYYY-MM-DD, default today),
+    like the website's "Remember Meal". Log the foods first.
+    kind=recipe: servings is how many servings it makes; ingredients is
+    [{external_id, quantity, serving}], one per ingredient. external_id comes
+    from a fitness_search_food candidate; serving names one of that food's
+    serving sizes (e.g. "cup"; required when it has several) and quantity is
+    how many of it go in (default 1). MyFitnessPal computes the nutrition.
+    """
+    day = parse_day(date)
+
+    def op(store, client):
+        return custom_writes.create_custom(
+            client,
+            kind,
+            name,
+            day=day,
+            nutrition=nutrition,
+            brand=brand,
+            serving_size=serving_size,
+            serving_unit=serving_unit,
+            servings=servings,
+            ingredients=ingredients,
+            meal=meal,
+            date=date,
+        )
+
+    return {"ok": True, **await with_session(ctx, op)}
 
 
 @mcp.tool(title="List remembered foods", annotations=READS_LOCAL)
