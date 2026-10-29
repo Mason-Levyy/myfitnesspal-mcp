@@ -14,6 +14,9 @@ All notable changes to this project are documented here. The format follows
 - `auth --clipboard` waits for the session cookie on the macOS clipboard and
   connects as soon as you copy it, skipping anything that isn't a session
   token (such as the command itself) and any token that doesn't authenticate.
+- `fitness_complete_day` reports whether a diary day is marked complete, or
+  marks it complete or reopens it. A bare call only reports. Completing posts
+  the day to your MyFitnessPal news feed, as the website's button does.
 
 ### Changed
 
