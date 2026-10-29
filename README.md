@@ -172,6 +172,8 @@ Then use the same `--from 'mfp-mcp[autorefresh]'` form in your client config
 | `fitness_clear_food_pin` | Forget one remembered choice, or all of them |
 | `fitness_delete_food` | Remove a diary entry by name match |
 | `fitness_modify_food` | Replace an entry (or change its quantity), choosing the replacement like `fitness_log_food` |
+| `fitness_list_custom` | Your custom foods, saved meals and recipes, with ids, servings and nutrition |
+| `fitness_log_custom` | Log one of them by name (a saved meal logs as its ingredients) |
 | `fitness_log_weight` | Log a weight measurement (updates the same day on re-log) |
 | `fitness_log_water` | Add water (cups, fl oz, mL, L) or set the day's total with `replace` |
 | `fitness_get_exercise` | Read the exercise diary (cardio + strength) |
