@@ -2,9 +2,8 @@ import datetime
 import threading
 
 import pytest
-from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from myfitnesspal_mcp import sync
+from myfitnesspal_mcp import mfp_client, sync
 
 TODAY = datetime.date(2026, 7, 8)
 
@@ -26,34 +25,40 @@ def test_first_number_prefers_first_present_key():
     assert sync.first_number({}, "carbohydrates", "carbs") is None
 
 
-class FakeEntry:
-    def __init__(self, name, totals):
-        self.name = name
-        self.totals = totals
+def fake_day():
+    return {
+        "foods": [
+            {
+                "meal": "breakfast",
+                "name": "Oats",
+                "nutrition": {"calories": 300, "protein": 10},
+            },
+            {
+                "meal": "lunch",
+                "name": "Pasta",
+                "nutrition": {
+                    "calories": 1800,
+                    "protein": 140,
+                    "carbohydrates": 200,
+                    "fat": 70,
+                },
+            },
+        ],
+        "goals": {"calories": 2200},
+    }
 
 
-class FakeMeal:
-    def __init__(self, name, entries):
-        self.name = name
-        self.entries = entries
-
-
-class FakeDay:
-    def __init__(self):
-        self.totals = {
-            "calories": 2100,
-            "protein": 150,
-            "carbohydrates": 200,
-            "fat": 70,
-        }
-        self.goals = {"calories": 2200}
-        self.water = 750
-        self.meals = [
-            FakeMeal(
-                "breakfast", [FakeEntry("Oats", {"calories": 300, "protein": 10})]
-            ),
-            FakeMeal("lunch", []),
-        ]
+@pytest.fixture(autouse=True)
+def reads_from_fake_client(monkeypatch):
+    monkeypatch.setattr(
+        sync.diary, "read_day", lambda client, day: client.read_day(day)
+    )
+    monkeypatch.setattr(sync.water, "get_water_ml", lambda client, day: 750.0)
+    monkeypatch.setattr(
+        sync.measurements,
+        "weight_history",
+        lambda client, since, until: client.weight_history(since, until),
+    )
 
 
 class FakeNoteResponse:
@@ -86,13 +91,13 @@ class FakeSyncClient:
         self.effective_username = "tester"
         self.session = FakeNoteSession(note_body)
 
-    def get_date(self, day):
+    def read_day(self, day):
         self.fetched.append(day)
-        return FakeDay()
+        return fake_day()
 
-    def get_measurements(self, kind, earliest):
-        self.measurements_earliest = earliest
-        return {day: value for day, value in self.weights.items() if day >= earliest}
+    def weight_history(self, since, until):
+        self.measurements_earliest = since
+        return {day: value for day, value in self.weights.items() if day >= since}
 
 
 def test_refresh_day_populates_store(store):
@@ -112,7 +117,15 @@ def test_refresh_day_populates_store(store):
             "protein": 10.0,
             "carbs": None,
             "fat": None,
-        }
+        },
+        {
+            "meal": "Lunch",
+            "name": "Pasta",
+            "calories": 1800.0,
+            "protein": 140.0,
+            "carbs": 200.0,
+            "fat": 70.0,
+        },
     ]
     assert store.note(TODAY.isoformat()) == "today felt great"
 
@@ -131,11 +144,11 @@ def test_concurrent_polls_fetch_once(store):
     let_fetch_finish = threading.Event()
 
     class SlowClient(FakeSyncClient):
-        def get_date(self, day):
+        def read_day(self, day):
             if day == TODAY:
                 today_fetch_started.set()
                 let_fetch_finish.wait(5)
-            return super().get_date(day)
+            return super().read_day(day)
 
     client = SlowClient()
     first = threading.Thread(target=sync.poll, args=(store, client, 2, False, TODAY))
@@ -203,10 +216,10 @@ def test_poll_retries_day_whose_fetch_failed(store):
             super().__init__()
             self.failing = {yesterday}
 
-        def get_date(self, day):
+        def read_day(self, day):
             if day in self.failing:
                 raise RuntimeError("MFP returned 502")
-            return super().get_date(day)
+            return super().read_day(day)
 
     client = FlakyClient()
     client.weights = {yesterday: 80.0}
@@ -222,20 +235,20 @@ def test_poll_retries_day_whose_fetch_failed(store):
 
 def test_poll_propagates_auth_errors(store):
     class ExpiredClient(FakeSyncClient):
-        def get_date(self, day):
-            raise MyfitnesspalLoginError("session expired")
+        def read_day(self, day):
+            raise mfp_client.NotConnectedError("session expired")
 
-    with pytest.raises(MyfitnesspalLoginError):
+    with pytest.raises(mfp_client.NotConnectedError):
         sync.poll(store, ExpiredClient(), days=2, force=True)
 
 
 def test_poll_skips_bad_days_without_auth_errors(store):
     class FlakyClient(FakeSyncClient):
-        def get_date(self, day):
+        def read_day(self, day):
             self.fetched.append(day)
             if len(self.fetched) == 1:
                 raise ValueError("parse error")
-            return FakeDay()
+            return fake_day()
 
     client = FlakyClient()
     sync.poll(store, client, days=2, force=True)

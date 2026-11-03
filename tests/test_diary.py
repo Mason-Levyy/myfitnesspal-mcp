@@ -1,4 +1,5 @@
 import datetime
+from pathlib import Path
 
 import pytest
 from lxml import html as lh
@@ -6,6 +7,7 @@ from lxml import html as lh
 from myfitnesspal_mcp import diary, entry_matching, mfp_client
 
 TODAY = datetime.date(2026, 7, 8)
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def meal_id(doc, meal):
@@ -400,3 +402,48 @@ def test_delete_food_removes_match(client):
 def test_delete_food_no_match(client):
     with pytest.raises(entry_matching.NoMatchingEntry, match="in dinner"):
         diary.delete_food(client, TODAY, "coffee", meal="dinner")
+
+
+@pytest.fixture
+def nutrition_client(client, make_response):
+    html = (FIXTURES / "diary_nutrition.html").read_text()
+    client.session.route("GET", "food/diary?date=", make_response(text=html))
+    return client
+
+
+def test_read_day_lists_foods_with_their_nutrition(nutrition_client):
+    day = diary.read_day(nutrition_client, TODAY)
+    assert [(food["meal"], food["name"]) for food in day["foods"]] == [
+        ("Breakfast", "Rolled Oats, 1 cup"),
+        ("Breakfast", "Whole Milk, 1 cup"),
+        ("Dinner", "Lasagna, 2 servings"),
+    ]
+    oats, _, lasagna = day["foods"]
+    assert oats["nutrition"] == {
+        "calories": 300.0,
+        "carbohydrates": 54.0,
+        "fat": 5.0,
+        "protein": 10.0,
+        "sodium": 0.0,
+    }
+    assert lasagna["nutrition"]["calories"] == 1240.0
+    assert lasagna["nutrition"]["sodium"] == 2310.0
+
+
+def test_read_day_reads_goals_not_totals(nutrition_client):
+    goals = diary.read_day(nutrition_client, TODAY)["goals"]
+    assert goals["calories"] == 2200.0
+    assert goals["carbohydrates"] == 275.0
+
+
+def test_read_day_without_goal_rows_has_no_goals(client):
+    assert diary.read_day(client, TODAY)["goals"] == {}
+
+
+def test_read_day_signed_out_page_is_an_auth_error(client, make_response):
+    client.session.route(
+        "GET", "food/diary?date=", make_response(text="<html><p>Log in</p></html>")
+    )
+    with pytest.raises(diary.DiarySignedOut) as raised:
+        diary.read_day(client, TODAY)
+    assert mfp_client.is_auth_error(raised.value)

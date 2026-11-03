@@ -8,10 +8,11 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, text="", json_data=None):
+    def __init__(self, status_code=200, text="", json_data=None, headers=None):
         self.status_code = status_code
         self.text = text
         self._json = json_data
+        self.headers = headers or {}
 
     def json(self):
         return self._json
@@ -53,13 +54,18 @@ class FakeClient:
         self.access_token = "fake-token"
         self.user_id = "user-1"
         self.effective_username = "tester"
-        self.food_details = {}
 
-    def _get_food_item_details(self, mfp_id):
-        detail = self.food_details.get(mfp_id)
-        if detail is None:
-            raise RuntimeError("no details")
-        return detail
+    def add_food_details(
+        self, mfp_id, *, calories, nutrition, serving_sizes, verified=True
+    ):
+        item = {
+            "verified": verified,
+            "nutritional_contents": {"energy": {"value": calories}, **nutrition},
+            "serving_sizes": serving_sizes,
+        }
+        self.session.route(
+            "GET", f"v2/foods/{mfp_id}?", FakeResponse(json_data={"item": item})
+        )
 
 
 @pytest.fixture

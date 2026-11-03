@@ -44,8 +44,10 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   entries, adding and removing food), `food_search.py`, `measurements.py`,
   `water.py`, `notes.py`, and `exercise.py`. Each function takes the client
   first. Request plumbing they share (URLs, headers, csrf pages, status checks)
-  lives in `mfp_web.py`, and matching a query to logged entries, shared by
-  food and exercise deletes, lives in `entry_matching.py`.
+  lives in `mfp_web.py`, reading the diary and exercise tables (column names,
+  numbers, where a section ends) lives in `diary_tables.py`, and matching a
+  query to logged entries, shared by food and exercise deletes, lives in
+  `entry_matching.py`.
 - `mfp_client.py` holds the `curl_cffi` client, the cached instance, and
   `is_auth_error`. `auth.py` captures and stores cookies, `paste.py` reads a
   pasted or copied cookie, `session_persistence.py` saves the cookies MFP
@@ -87,12 +89,12 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
 - **Schema changes need a migration.** Users keep databases from older
   releases. New tables go in `SCHEMA` as `CREATE ... IF NOT EXISTS`, and new
   columns on existing tables also go in `Store._migrate`.
-- **Dependency pins are deliberate.** `myfitnesspal` is pinned exactly because
-  `CurlCffiClient` overrides its private `_get_user_metadata`, and
-  `food_search.py` and `exercise.py` call its private `_get_food_item_details`
-  and `_get_exercises`, so check that they still exist before bumping it. The
-  upper bounds on `mcp` and `curl-cffi` stay until someone has tested a new
-  major against a real account.
+- **Dependency pins are deliberate.** The upper bounds on `mcp` and
+  `curl-cffi` stay until someone has tested a new major against a real account.
+- **Some code came from python-myfitnesspal.** The sign-in in `mfp_client.py`
+  and the parsing of the diary, exercise, and measurements pages and of food
+  details started as that MIT-licensed library. `NOTICE` carries its license
+  and ships in the wheel, so keep it when moving or trimming that code.
 
 ## Protect existing users
 

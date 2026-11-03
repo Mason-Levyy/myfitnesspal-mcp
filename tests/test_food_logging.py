@@ -10,15 +10,16 @@ TODAY = datetime.date(2026, 7, 8)
 
 @pytest.fixture
 def banana_details(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
-        "serving_sizes": [
+    client.add_food_details(
+        999,
+        calories=105.0,
+        verified=True,
+        nutrition={"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
+        serving_sizes=[
             {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
             {"value": 1.0, "unit": "large", "nutrition_multiplier": 1.15},
         ],
-    }
+    )
     return client
 
 
@@ -142,18 +143,15 @@ def test_bare_query_logs_single_exact_match(banana_details, store):
     assert store.pin("banana") is None
 
 
-def test_bare_exact_match_skips_details_calls(banana_details, store, monkeypatch):
-    def details_must_not_run(external_id):
-        raise AssertionError("details fetched for an unambiguous exact match")
-
-    monkeypatch.setattr(banana_details, "_get_food_item_details", details_must_not_run)
+def test_bare_exact_match_skips_details_calls(banana_details, store):
     result = food_logging.log_by_query(
         banana_details, store, "Banana", TODAY, meal="breakfast", quantity=1.0
     )
     assert result["source"] == "exact_match"
     assert result["serving"] == "1 medium"
-    searches = [url for _, url, _ in banana_details.session.calls if "search" in url]
-    assert len(searches) == 1
+    urls = [url for _, url, _ in banana_details.session.calls]
+    assert len([url for url in urls if "search" in url]) == 1
+    assert not [url for url in urls if "v2/foods" in url]
 
 
 def test_pin_and_exact_paths_report_one_shape(banana_details, store):
