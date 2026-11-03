@@ -17,6 +17,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- mfp-mcp now runs on the MCP Python SDK 2.x and requires `mcp>=2.1,<3`
+  (it required `mcp<2` before). Tools, their arguments and their results are
+  unchanged, and tool errors still reach the model with their full message.
+  The server now reports its own version to clients instead of the SDK's.
+  With `--http`, sessions idle for 30 minutes are closed and the client has
+  to initialize again; clients that keep the event stream open, as the SDK's
+  own does, aren't affected. On upgrade: nothing to do if you run it through
+  `uvx` or in its own environment. If you installed it into an environment
+  where something else pins `mcp<2`, that package has to allow mcp 2.x first,
+  or stay on mfp-mcp 0.4.x.
 - mfp-mcp no longer depends on python-myfitnesspal. The parts the server used
   (signing in with the session cookie and reading the food diary, exercise
   diary, weight history and food details) now live in this repo, trimmed to

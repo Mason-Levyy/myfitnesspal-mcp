@@ -1,8 +1,9 @@
 import asyncio
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
-from myfitnesspal_mcp import mfp_client, server
+from myfitnesspal_mcp import diary, mfp_client, server
 from myfitnesspal_mcp.store import Store
 
 
@@ -299,11 +300,11 @@ def test_tools_list_without_a_session(monkeypatch):
     assert tools
     for tool in tools:
         assert tool.title, tool.name
-        assert tool.annotations.readOnlyHint is not None, tool.name
-        assert tool.annotations.openWorldHint is not None, tool.name
-        if not tool.annotations.readOnlyHint:
-            assert tool.annotations.destructiveHint is not None, tool.name
-            assert tool.annotations.idempotentHint is not None, tool.name
+        assert tool.annotations.read_only_hint is not None, tool.name
+        assert tool.annotations.open_world_hint is not None, tool.name
+        if not tool.annotations.read_only_hint:
+            assert tool.annotations.destructive_hint is not None, tool.name
+            assert tool.annotations.idempotent_hint is not None, tool.name
 
 
 def test_tools_that_remove_or_overwrite_are_marked_destructive():
@@ -313,6 +314,24 @@ def test_tools_that_remove_or_overwrite_are_marked_destructive():
         "fitness_delete_exercise",
         "fitness_modify_food",
     ]:
-        assert tools[name].annotations.destructiveHint, name
-    assert not tools["fitness_log_food"].annotations.destructiveHint
-    assert not tools["fitness_log_food"].annotations.idempotentHint
+        assert tools[name].annotations.destructive_hint, name
+    assert not tools["fitness_log_food"].annotations.destructive_hint
+    assert not tools["fitness_log_food"].annotations.idempotent_hint
+
+
+def test_tool_errors_reach_the_model_with_their_message():
+    with pytest.raises(ToolError, match="pass query, or clear_all=True"):
+        asyncio.run(server.mcp.call_tool("fitness_clear_food_pin", {}))
+
+
+def test_unknown_meal_error_lists_the_configured_meals(monkeypatch):
+    def unknown_meal(*args, **kwargs):
+        raise diary.UnknownMeal(
+            "no MyFitnessPal meal named 'brunch'. Configured meals: Breakfast"
+        )
+
+    monkeypatch.setattr(server, "with_session", unknown_meal)
+    with pytest.raises(ToolError, match="Configured meals: Breakfast"):
+        asyncio.run(
+            server.mcp.call_tool("fitness_log_food", {"query": "egg", "meal": "brunch"})
+        )

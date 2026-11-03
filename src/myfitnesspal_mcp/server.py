@@ -3,10 +3,12 @@ import datetime
 from collections.abc import Callable
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.types import ToolAnnotations
 
 from . import (
+    __version__,
     diary,
     exercise,
     food_logging,
@@ -21,7 +23,23 @@ from . import (
 from .food_ranking import MacroTargets
 from .store import Store, trend_column
 
-mcp = FastMCP("myfitnesspal")
+
+class _Server(MCPServer):
+    # mcp 2.x reports any exception that isn't a ToolError as a bare "Error
+    # executing tool", but ours are written for the model to act on (see
+    # no_matching_entry) and never carry cookies or tokens.
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], context: Context | None = None
+    ) -> Any:
+        try:
+            return await super().call_tool(name, arguments, context)
+        except UnexpectedToolError as exc:
+            if exc.__cause__ is None:
+                raise
+            raise ToolError(f"Error executing tool {name}: {exc.__cause__}") from exc
+
+
+mcp = _Server("myfitnesspal", version=__version__)
 
 READS_MFP = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
 READS_LOCAL = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
