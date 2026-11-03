@@ -13,13 +13,11 @@ updates:
       interval: monthly
     labels: ["dependencies"]
     # Bumped by hand, on purpose:
-    # - myfitnesspal is parsed by version-specific code.
     # - curl-cffi minors swap the bundled curl-impersonate, changing the TLS
     #   fingerprint MFP sees; nothing in CI exercises the network.
-    # - mcp majors need a real 2.x test run; myfitnesspal's typing-extensions
-    #   pin currently masks them from the resolver, so a green CI proves nothing.
+    # - mcp majors change the server API and how tool errors reach the model,
+    #   so they need a port and a run against a real MCP client.
     ignore:
-      - dependency-name: myfitnesspal
       - dependency-name: curl-cffi
       - dependency-name: mcp
         update-types: ["version-update:semver-major"]

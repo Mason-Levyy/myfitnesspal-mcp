@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-from myfitnesspal.exceptions import MyfitnesspalLoginError
 
 from myfitnesspal_mcp import mfp_client, server
 from myfitnesspal_mcp.store import Store
@@ -16,7 +15,7 @@ class FakeContext:
 
 
 def test_is_auth_error_patterns():
-    assert mfp_client.is_auth_error(MyfitnesspalLoginError("bad"))
+    assert mfp_client.is_auth_error(mfp_client.ProfileUnavailable("x"))
     assert mfp_client.is_auth_error(mfp_client.NotConnectedError("x"))
     assert mfp_client.is_auth_error(RuntimeError("HTTP 403 returned"))
     assert mfp_client.is_auth_error(RuntimeError("couldn't read the csrf token"))
@@ -35,7 +34,7 @@ def test_run_with_refresh_retries_auth_failures(monkeypatch):
     def op():
         attempts.append(1)
         if len(attempts) == 1:
-            raise MyfitnesspalLoginError("session expired")
+            raise mfp_client.NotConnectedError("session expired")
         return "second try"
 
     ctx = FakeContext()
@@ -60,7 +59,7 @@ def test_run_with_refresh_gives_clear_error_when_retry_fails(monkeypatch):
     monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
 
     def op():
-        raise MyfitnesspalLoginError("still expired")
+        raise mfp_client.NotConnectedError("still expired")
 
     ctx = FakeContext()
     with pytest.raises(RuntimeError, match="uvx mfp-mcp auth"):
@@ -193,7 +192,7 @@ def refresh_expires_once(connected, monkeypatch):
     def flaky_refresh(store, client, day):
         refresh_calls.append(day)
         if len(refresh_calls) == 1:
-            raise MyfitnesspalLoginError("session expired")
+            raise mfp_client.NotConnectedError("session expired")
 
     monkeypatch.setattr(server.sync, "refresh_day", flaky_refresh)
     return refresh_calls
@@ -240,7 +239,7 @@ def test_failed_refresh_after_write_warns_instead_of_raising(connected, monkeypa
     monkeypatch.setattr(server.refresh, "refresh_session", lambda: None)
 
     def always_expired(store, client, day):
-        raise MyfitnesspalLoginError("session expired")
+        raise mfp_client.NotConnectedError("session expired")
 
     monkeypatch.setattr(server.sync, "refresh_day", always_expired)
     result = asyncio.run(

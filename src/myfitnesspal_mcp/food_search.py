@@ -1,8 +1,11 @@
 import logging
+from urllib import parse
 
-from .mfp_web import get_document, site_url
+from .mfp_web import get_document, get_json, site_url
 
 logger = logging.getLogger(__name__)
+
+FOOD_DETAIL_FIELDS = ("nutritional_contents", "serving_sizes", "confirmations")
 
 
 def _result_extras(anchor) -> dict:
@@ -92,18 +95,20 @@ def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict
 def food_details(client, external_id: str | None) -> dict | None:
     if not external_id:
         return None
+    query = parse.urlencode([("fields[]", field) for field in FOOD_DETAIL_FIELDS])
     try:
-        details = client._get_food_item_details(int(external_id))
-        nutrition = details["nutrition"]
+        url = parse.urljoin(client.BASE_API_URL, f"v2/foods/{int(external_id)}?{query}")
+        item = get_json(client, url)["item"]
+        nutrition = item["nutritional_contents"]
         return {
-            "verified": details.get("verified"),
+            "verified": item.get("verified"),
             "nutrition": {
-                "calories": details["calories"],
+                "calories": nutrition.get("energy", {}).get("value", 0.0),
                 "protein": nutrition.get("protein"),
                 "carbs": nutrition.get("carbohydrates"),
                 "fat": nutrition.get("fat"),
             },
-            "serving_sizes": details.get("serving_sizes") or [],
+            "serving_sizes": item.get("serving_sizes") or [],
         }
     except Exception as exc:
         logger.debug("no details for food %s, using search data: %s", external_id, exc)

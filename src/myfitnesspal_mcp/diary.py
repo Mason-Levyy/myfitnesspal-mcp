@@ -2,6 +2,7 @@ from datetime import date
 
 from lxml import html as lh
 
+from .diary_tables import column_name, parse_number, rows_until_classed
 from .entry_matching import (
     DiaryLookupError,
     collapse_whitespace,
@@ -10,6 +11,7 @@ from .entry_matching import (
 )
 from .mfp_web import (
     form_headers,
+    get_document,
     get_page,
     post_legacy_delete,
     require_status,
@@ -62,14 +64,73 @@ def food_diary_url(client, day: date | None = None) -> str:
     return site_url(client, "food/diary", day)
 
 
-def diary_page(client, day: date) -> tuple[lh.HtmlElement, str]:
-    doc, csrf = get_page(client, food_diary_url(client, day))
+def _require_meals(doc: lh.HtmlElement) -> lh.HtmlElement:
     if not meal_headers(doc):
         raise DiarySignedOut(
             "the MyFitnessPal diary page has no meal sections; the login "
             "session has likely expired"
         )
-    return doc, csrf
+    return doc
+
+
+def diary_page(client, day: date) -> tuple[lh.HtmlElement, str]:
+    doc, csrf = get_page(client, food_diary_url(client, day))
+    return _require_meals(doc), csrf
+
+
+def read_day(client, day: date) -> dict:
+    doc = _require_meals(get_document(client, food_diary_url(client, day)))
+    return {"foods": logged_foods(doc), "goals": daily_goals(doc)}
+
+
+def _nutrient_columns(doc) -> list[str]:
+    headers = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
+    return (
+        [column_name(cell) for cell in headers[0].xpath("./td")[1:]] if headers else []
+    )
+
+
+def _nutrient_value(cell) -> float:
+    """A cell can wrap the number in a macro-value span beside its percentage."""
+    spans = cell.xpath("./span[@class='macro-value']")
+    return parse_number(spans[0].text if spans else cell.text)
+
+
+def _nutrition(row, columns: list[str]) -> dict[str, float]:
+    cells = row.xpath("./td")[1:]
+    return {
+        name: _nutrient_value(cell)
+        for name, cell in zip(columns, cells, strict=False)
+        if name
+    }
+
+
+def _food_name(cell) -> str:
+    anchors = cell.xpath("./a")
+    return (anchors[0] if anchors else cell).text_content().strip()
+
+
+def logged_foods(doc) -> list[dict]:
+    columns = _nutrient_columns(doc)
+    header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
+    return [
+        {
+            "meal": _header_label(header, position),
+            "name": _food_name(row.xpath("./td")[0]),
+            "nutrition": _nutrition(row, columns),
+        }
+        for position, header in enumerate(header_rows)
+        for row in rows_until_classed(header.getnext())
+    ]
+
+
+def daily_goals(doc) -> dict[str, float]:
+    """The goals row follows the first "total" row, under the meal columns."""
+    totals = doc.xpath("//tr[@class='total']")
+    goals = totals[0].getnext() if totals else None
+    if goals is None:
+        return {}
+    return _nutrition(goals, _nutrient_columns(doc))
 
 
 def push_food(

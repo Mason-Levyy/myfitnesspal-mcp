@@ -17,6 +17,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- mfp-mcp no longer depends on python-myfitnesspal. The parts the server used
+  (signing in with the session cookie and reading the food diary, exercise
+  diary, weight history and food details) now live in this repo, trimmed to
+  what the server needs and adapted to its `curl_cffi` session; NOTICE keeps
+  python-myfitnesspal's MIT license. Installs drop the 19 packages it pulled in
+  (among them `cloudscraper`, `browser_cookie3`, `requests` and `sympy`) and
+  the caps it put on `lxml` (<6), `rich` (<13) and `typing-extensions`
+  (==4.12.2), the last of which kept mcp 2.x from installing next to mfp-mcp.
+  MyFitnessPal sees the same requests, minus a redundant page load per weight
+  sync. Nothing to do on upgrade.
 - `auth --check` renews the session as it checks and saves the cookie
   MyFitnessPal re-issues, and exits 1 when MyFitnessPal won't renew the
   session, so a scheduled check keeps an idle session alive and warns before
@@ -27,6 +37,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A weigh-in MyFitnessPal lists without a value no longer syncs into the
+  cache as 0.
+- `fitness_get_exercise` no longer fails when an exercise table has a column
+  without a heading, such as the delete column.
 - Saved sessions no longer stop working within about a day. Building a
   client can sign in again through `/account/login`, which issues a new
   session token and refresh token on every call; the server kept them in

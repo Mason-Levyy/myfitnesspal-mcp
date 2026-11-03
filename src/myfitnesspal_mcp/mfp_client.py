@@ -1,13 +1,11 @@
 import logging
 import re
-import uuid
 from http.cookiejar import Cookie, CookieJar
+from urllib import parse
 
-import myfitnesspal
 from curl_cffi import requests as cffi_requests
-from myfitnesspal.exceptions import MyfitnesspalLoginError
 
-from . import auth, config, diary, entry_matching, session_persistence
+from . import auth, config, diary, entry_matching, mfp_web, session_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +14,30 @@ RECONNECT_HINT = (
     f"Re-run '{auth.AUTH_COMMAND}' or update MFP_COOKIE, then retry."
 )
 SESSION_URL = "https://www.myfitnesspal.com/api/auth/session"
+AUTH_TOKEN_URL = "https://www.myfitnesspal.com/user/auth_token?refresh=true"
+PROFILE_FIELDS = (
+    "diary_preferences",
+    "goal_preferences",
+    "unit_preferences",
+    "paid_subscriptions",
+    "account",
+    "goal_displays",
+    "location_preferences",
+    "system_data",
+    "profiles",
+    "step_sources",
+    "privacy_preferences",
+    "social_preferences",
+    "app_preferences",
+    "partner_only_fields",
+)
 
 
 class NotConnectedError(RuntimeError):
+    pass
+
+
+class ProfileUnavailable(NotConnectedError):
     pass
 
 
@@ -29,20 +48,21 @@ _AUTH_ERROR_PATTERN = re.compile(
 
 
 def is_auth_error(exc: Exception) -> bool:
-    if isinstance(exc, (NotConnectedError, MyfitnesspalLoginError)):
-        return True
-    if isinstance(exc, diary.DiarySignedOut):
+    if isinstance(exc, (NotConnectedError, diary.DiarySignedOut)):
         return True
     if isinstance(exc, entry_matching.DiaryLookupError):
         return False
     return bool(_AUTH_ERROR_PATTERN.search(str(exc)))
 
 
-class CurlCffiClient(myfitnesspal.Client):
-    """MyFitnessPal sits behind Cloudflare, which fingerprints the upstream
-    cloudscraper transport as a bot and 403s even with valid cookies. A real
-    Chrome TLS/JA3 fingerprint passes with just the NextAuth session cookie.
+class CurlCffiClient:
+    """MyFitnessPal sits behind Cloudflare, which fingerprints python-requests
+    style transports as a bot and 403s even with valid cookies. A real Chrome
+    TLS/JA3 fingerprint passes with just the NextAuth session cookie.
     """
+
+    BASE_URL_SECURE = "https://www.myfitnesspal.com/"
+    BASE_API_URL = "https://api.myfitnesspal.com/"
 
     def __init__(
         self,
@@ -50,11 +70,6 @@ class CurlCffiClient(myfitnesspal.Client):
         username: str | None = None,
         impersonate: str | None = None,
     ):
-        self._username_override = username
-        self._client_instance_id = uuid.uuid4()
-        self._request_counter = 0
-        self._log_requests_to = None
-        self.unit_aware = False
         self.session = cffi_requests.Session(
             impersonate=impersonate or config.impersonate()
         )
@@ -62,30 +77,45 @@ class CurlCffiClient(myfitnesspal.Client):
         self.loaded_cookies: dict[str, str] = {}
         self.saved_cookies: dict[str, str] = {}
         self.session_renewed = True
-        self._auth_data = self._get_auth_data()
-        self._user_metadata = self._get_user_metadata()
+        token = fetch_auth_token(self)
+        self.access_token: str = token["access_token"]
+        self.user_id: str = token["user_id"]
+        self.effective_username = resolve_username(self, username)
 
-    def _get_user_metadata(self):
-        """MFP's v2 users endpoint 500s for some accounts; fall back to the
-        configured username, which is all the diary URLs need."""
-        try:
-            meta = super()._get_user_metadata()
-            if meta and meta.get("username"):
-                return meta
-        except Exception as exc:
-            logger.debug("profile lookup failed, using the saved username: %s", exc)
-        username = self._username_override or auth.saved_username()
-        if not username:
-            raise MyfitnesspalLoginError(
-                "Authenticated, but couldn't read your MyFitnessPal profile. "
-                "Set MFP_USERNAME to your MyFitnessPal username (not email) and retry."
-            )
-        return {"username": username}
 
-    def _get_url_for_date(self, date, username, friend_username=None) -> str:
-        if friend_username is not None:
-            return super()._get_url_for_date(date, username, friend_username)
-        return diary.food_diary_url(self, date)
+def fetch_auth_token(client) -> dict:
+    """The diary pages run on cookies, but MFP's API calls take this Bearer
+    token. Anything but JSON back means the cookies didn't sign in."""
+    resp = client.session.get(AUTH_TOKEN_URL)
+    if resp.status_code >= 400:
+        raise NotConnectedError(
+            f"MyFitnessPal refused the auth token request (HTTP {resp.status_code})"
+        )
+    if not resp.headers.get("Content-Type", "").startswith("application/json"):
+        raise NotConnectedError(
+            "MyFitnessPal didn't accept the session cookie (no auth token came back)"
+        )
+    return resp.json()
+
+
+def resolve_username(client, override: str | None = None) -> str:
+    """MFP's v2 users endpoint 500s for some accounts; fall back to the
+    configured username, which is all the diary URLs need."""
+    query = parse.urlencode([("fields[]", field) for field in PROFILE_FIELDS])
+    url = parse.urljoin(client.BASE_API_URL, f"v2/users/{client.user_id}?{query}")
+    try:
+        username = (mfp_web.get_json(client, url) or {})["item"].get("username")
+        if username:
+            return username
+    except Exception as exc:
+        logger.debug("profile lookup failed, using the saved username: %s", exc)
+    username = override or auth.saved_username()
+    if not username:
+        raise ProfileUnavailable(
+            "Authenticated, but couldn't read your MyFitnessPal profile. "
+            "Set MFP_USERNAME to your MyFitnessPal username (not email) and retry."
+        )
+    return username
 
 
 def cookies_to_jar(cookies: dict[str, str]) -> CookieJar:
