@@ -59,9 +59,7 @@ def main() -> None:
     from .server import mcp
 
     if args.http:
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="streamable-http", host=args.host, port=args.port)
     else:
         mcp.run()
 

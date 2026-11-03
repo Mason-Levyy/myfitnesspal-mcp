@@ -241,7 +241,9 @@ The default transport is stdio. For network clients:
 mfp-mcp --http --host 127.0.0.1 --port 8484
 ```
 
-This serves streamable HTTP at `/mcp`. **There is no built-in authentication —
+This serves streamable HTTP at `/mcp`. A session idle for 30 minutes is closed,
+and the client has to reconnect; clients that keep the event stream open aren't
+affected. **There is no built-in authentication —
 never expose it to the internet.** Bind to localhost and front it with
 something that authenticates for you: a VPN/tailnet (e.g. `tailscale serve`),
 an authenticating reverse proxy, or an OAuth-aware MCP gateway.
