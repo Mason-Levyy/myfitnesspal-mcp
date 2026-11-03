@@ -147,3 +147,23 @@ def test_identical_exercise_rows_resolve_to_one():
 def test_delete_exercise_is_case_insensitive(exercise_client):
     result = exercise.delete_exercise(exercise_client, TODAY, "PULL UP")
     assert result["removed"][0]["entry_id"] == "555"
+
+
+def test_get_exercise_reads_each_section(exercise_client):
+    result = exercise.get_exercise(exercise_client, TODAY)
+    assert result["day"] == "2026-09-10"
+    cardio = result["exercise"]["cardiovascular"]
+    assert cardio[1] == {
+        "name": "Running (jogging), 8 kph",
+        "nutrition_information": {"minutes": 20.0, "calories burned": 1201.0},
+    }
+    strength = result["exercise"]["strength training"]
+    assert strength[1] == {
+        "name": "Pull Up",
+        "nutrition_information": {"sets": 4.0, "reps/set": 10.0, "weight/set": None},
+    }
+
+
+def test_exercise_sections_stop_at_the_totals_row(exercise_doc):
+    sections = exercise.exercise_sections(exercise_doc)
+    assert [len(entries) for entries in sections.values()] == [3, 2]

@@ -2,8 +2,9 @@ from datetime import date
 
 from lxml import html as lh
 
+from .diary_tables import column_name, parse_number, rows_until_classed
 from .entry_matching import find_entries, no_matching_entry, resolve_entry
-from .mfp_web import get_page, post_legacy_delete, site_url
+from .mfp_web import get_document, get_page, post_legacy_delete, site_url
 
 ALL_MATCHES_ADVICE = (
     "Use a more specific query to pick one, or pass all_matches=True to remove "
@@ -12,10 +13,37 @@ ALL_MATCHES_ADVICE = (
 
 
 def get_exercise(client, day: date) -> dict:
+    doc = get_document(client, _exercise_diary_url(client, day))
+    return {"day": day.isoformat(), "exercise": exercise_sections(doc)}
+
+
+def _logged_value(cell) -> float | None:
+    if cell.text is None or "N/A" in cell.text:
+        return None
+    return parse_number(cell.text)
+
+
+def exercise_sections(doc) -> dict[str, list[dict]]:
     sections = {}
-    for section in client._get_exercises(day):
-        sections[section.name.lower()] = section.get_as_list()
-    return {"day": day.isoformat(), "exercise": sections}
+    for table in doc.xpath("//table[@class='table0']"):
+        headings = table.xpath("./thead/tr[1]/td")
+        if not headings:
+            continue
+        section, *columns = map(column_name, headings)
+        first_rows = table.xpath("./tbody/tr[1]")
+        rows = rows_until_classed(first_rows[0]) if first_rows else ()
+        sections[section] = [
+            {
+                "name": _exercise_name(row.xpath("./td")[0]),
+                "nutrition_information": {
+                    name: _logged_value(cell)
+                    for name, cell in zip(columns, row.xpath("./td")[1:], strict=False)
+                    if name
+                },
+            }
+            for row in rows
+        ]
+    return sections
 
 
 def _exercise_diary_url(client, day: date | None = None) -> str:

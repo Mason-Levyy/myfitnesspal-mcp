@@ -88,15 +88,11 @@ def _validate(cookies: dict[str, str]):
     """Builds a client from the cookies; when only the profile lookup fails (a
     known MFP issue for accounts that log in by email), asks for the username
     and retries instead of failing the whole flow."""
-    from myfitnesspal.exceptions import MyfitnesspalLoginError
-
     from . import mfp_client
 
     try:
         return mfp_client.build_client(cookies)
-    except MyfitnesspalLoginError as exc:
-        if "profile" not in str(exc):
-            raise
+    except mfp_client.ProfileUnavailable:
         if not sys.stdin.isatty():
             raise
         print(

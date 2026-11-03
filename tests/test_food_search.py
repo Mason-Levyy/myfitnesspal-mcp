@@ -20,12 +20,13 @@ def test_search_results_degrade_without_external_id(client):
 
 
 def test_search_food_enriches_macros(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
-        "serving_sizes": [{"value": 1, "unit": "medium"}],
-    }
+    client.add_food_details(
+        999,
+        calories=105.0,
+        verified=True,
+        nutrition={"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
+        serving_sizes=[{"value": 1, "unit": "medium"}],
+    )
     candidates = food_search.search_food(client, "banana", limit=2)
     assert len(candidates) == 2
     enriched = candidates[0]
@@ -36,6 +37,11 @@ def test_search_food_enriches_macros(client):
     degraded = candidates[1]
     assert degraded["protein"] is None
     assert degraded["calories"] == 196.0
+    details_url = next(url for _, url, _ in client.session.calls if "v2/foods" in url)
+    assert details_url == (
+        "https://api.myfitnesspal.com/v2/foods/999?fields%5B%5D=nutritional_contents"
+        "&fields%5B%5D=serving_sizes&fields%5B%5D=confirmations"
+    )
 
 
 def test_search_food_survives_detail_failures(client):
@@ -75,12 +81,13 @@ def test_pair_servings_skips_malformed_entries_without_shifting_weight_ids():
 
 
 def test_food_candidates_survive_one_malformed_food(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {},
-        "serving_sizes": [{"value": None}, {"unit": "slice"}],
-    }
+    client.add_food_details(
+        999,
+        calories=105.0,
+        verified=True,
+        nutrition={},
+        serving_sizes=[{"value": None}, {"unit": "slice"}],
+    )
     candidates = food_search.food_candidates(client, "banana")
     assert [candidate["name"] for candidate in candidates] == [
         "Banana",
@@ -93,15 +100,16 @@ def test_food_candidates_survive_one_malformed_food(client):
 
 
 def test_food_candidates_build_ranking_shape(client):
-    client.food_details[999] = {
-        "calories": 105.0,
-        "verified": True,
-        "nutrition": {"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
-        "serving_sizes": [
+    client.add_food_details(
+        999,
+        calories=105.0,
+        verified=True,
+        nutrition={"protein": 1.3, "carbohydrates": 27.0, "fat": 0.4},
+        serving_sizes=[
             {"value": 1.0, "unit": "medium", "nutrition_multiplier": 1.0},
             {"value": 118.0, "unit": "g", "nutrition_multiplier": 1.0},
         ],
-    }
+    )
     banana, banana_bread = food_search.food_candidates(client, "banana")
     assert banana["search_rank"] == 0
     assert banana["verified"] is True

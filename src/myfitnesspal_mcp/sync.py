@@ -3,7 +3,7 @@ import threading
 from contextlib import contextmanager
 from datetime import date, timedelta
 
-from . import config, notes
+from . import config, diary, measurements, notes, water
 from .mfp_client import is_auth_error
 from .store import Store
 
@@ -57,23 +57,34 @@ def macros(totals: dict) -> dict:
     }
 
 
+def nutrition_totals(foods: list[dict]) -> dict:
+    totals: dict = {}
+    for food in foods:
+        for name, value in food["nutrition"].items():
+            totals[name] = totals.get(name, 0) + value
+    return totals
+
+
 def refresh_day(store: Store, client, day: date) -> None:
-    mfp_day = client.get_date(day)
+    logged = diary.read_day(client, day)
     key = day.isoformat()
 
     store.upsert_nutrition(
         key,
-        **macros(mfp_day.totals),
-        water_ml=as_float(mfp_day.water),
-        goal_calories=first_number(mfp_day.goals or {}, "calories"),
+        **macros(nutrition_totals(logged["foods"])),
+        water_ml=water.get_water_ml(client, day),
+        goal_calories=first_number(logged["goals"], "calories"),
     )
 
     store.replace_diary(
         key,
         [
-            {"meal": str(meal.name).title(), "name": entry.name, **macros(entry.totals)}
-            for meal in mfp_day.meals
-            for entry in meal.entries
+            {
+                "meal": food["meal"].title(),
+                "name": food["name"],
+                **macros(food["nutrition"]),
+            }
+            for food in logged["foods"]
         ],
     )
 
@@ -111,9 +122,8 @@ def _poll_window(store: Store, client, days: int | None, today: date) -> None:
             refresh_day(store, client, day)
 
     with tolerating_failures("weight measurements"):
-        weights = client.get_measurements("Weight", window_start)
+        weights = measurements.weight_history(client, window_start, today)
         for day, value in weights.items():
-            if day >= window_start:
-                store.upsert_nutrition(day.isoformat(), weight=float(value))
+            store.upsert_nutrition(day.isoformat(), weight=float(value))
 
     store.mark_synced(today)

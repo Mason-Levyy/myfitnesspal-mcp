@@ -1,4 +1,4 @@
-import datetime
+import pytest
 
 from myfitnesspal_mcp import mfp_client
 
@@ -10,40 +10,59 @@ def test_cookies_to_jar_scopes_to_myfitnesspal():
     assert all(c.domain == ".myfitnesspal.com" and c.secure for c in cookies)
 
 
-def test_username_override_used_when_profile_fails(monkeypatch):
-    captured = {}
-
-    class FakeClient:
-        def __init__(self, jar, username=None, impersonate=None):
-            self._username_override = username
-            captured["impersonate"] = impersonate
-
-        def _get_user_metadata(self):
-            return mfp_client.CurlCffiClient._get_user_metadata(self)
-
-        def _get_auth_data(self):
-            return {}
-
-    def boom(self):
-        raise RuntimeError("status 500")
-
-    monkeypatch.setattr(mfp_client.myfitnesspal.Client, "_get_user_metadata", boom)
-
-    fake = FakeClient(None, username="injected-name", impersonate="chrome124")
-    assert fake._get_user_metadata() == {"username": "injected-name"}
-    assert captured["impersonate"] == "chrome124"
+JSON = {"Content-Type": "application/json; charset=utf-8"}
 
 
-def test_own_diary_date_url_drops_username():
-    client = object.__new__(mfp_client.CurlCffiClient)
-    url = client._get_url_for_date(datetime.date(2026, 9, 29), "tester")
-    assert url == "https://www.myfitnesspal.com/food/diary?date=2026-09-29"
+def test_auth_token_read_from_json(client, make_response):
+    token = {"access_token": "abc", "user_id": "42"}
+    client.session.route(
+        "GET", "user/auth_token", make_response(json_data=token, headers=JSON)
+    )
+    assert mfp_client.fetch_auth_token(client) == token
 
 
-def test_friend_diary_date_url_keeps_friend_username():
-    client = object.__new__(mfp_client.CurlCffiClient)
-    url = client._get_url_for_date(datetime.date(2026, 9, 29), "tester", "buddy")
-    assert url == "https://www.myfitnesspal.com/food/diary/buddy?date=2026-09-29"
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"text": "<html>Log in</html>", "headers": {"Content-Type": "text/html"}},
+        {"status_code": 503, "headers": JSON},
+    ],
+)
+def test_auth_token_rejection_is_an_auth_error(client, make_response, response):
+    client.session.route("GET", "user/auth_token", make_response(**response))
+    with pytest.raises(mfp_client.NotConnectedError) as raised:
+        mfp_client.fetch_auth_token(client)
+    assert mfp_client.is_auth_error(raised.value)
+
+
+def test_username_read_from_profile(client, make_response):
+    client.session.route(
+        "GET",
+        "v2/users/user-1?",
+        make_response(json_data={"item": {"username": "pal"}}),
+    )
+    assert mfp_client.resolve_username(client, "override") == "pal"
+    url = client.session.calls[-1][1]
+    assert url.startswith("https://api.myfitnesspal.com/v2/users/user-1?")
+    assert "fields%5B%5D=account" in url
+
+
+def test_username_override_used_when_profile_fails(client, make_response):
+    client.session.route("GET", "v2/users/", make_response(status_code=500))
+    assert mfp_client.resolve_username(client, "injected-name") == "injected-name"
+
+
+def test_saved_username_used_when_profile_fails(client, make_response, monkeypatch):
+    client.session.route("GET", "v2/users/", make_response(status_code=500))
+    monkeypatch.setattr(mfp_client.auth, "saved_username", lambda: "saved-name")
+    assert mfp_client.resolve_username(client) == "saved-name"
+
+
+def test_no_username_anywhere_asks_for_one(client, make_response, monkeypatch):
+    client.session.route("GET", "v2/users/", make_response(status_code=500))
+    monkeypatch.setattr(mfp_client.auth, "saved_username", lambda: None)
+    with pytest.raises(mfp_client.ProfileUnavailable, match="MFP_USERNAME"):
+        mfp_client.resolve_username(client)
 
 
 def test_is_auth_error_matches_expired_language():

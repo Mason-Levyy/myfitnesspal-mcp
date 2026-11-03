@@ -5,7 +5,6 @@ from http.cookiejar import CookieJar
 from types import SimpleNamespace
 
 import pytest
-from myfitnesspal.exceptions import MyfitnesspalLoginError
 
 from myfitnesspal_mcp import auth, cli, mfp_client, refresh
 
@@ -80,7 +79,7 @@ def check_env(tmp_path, monkeypatch):
 
 
 def reject_session(cookies):
-    raise MyfitnesspalLoginError("session expired")
+    raise mfp_client.NotConnectedError("session expired")
 
 
 def test_check_without_session_skips_network(check_env, monkeypatch, capsys):
