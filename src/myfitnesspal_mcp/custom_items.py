@@ -31,6 +31,7 @@ class Kind:
     tab: str
     read_details: Callable[[object], list[tuple[str, dict]]]
     empty_details: dict
+    create_fields: frozenset[str]
 
 
 class NoSuchItem(DiaryLookupError):
@@ -70,7 +71,7 @@ def saved_meals(client) -> list[dict]:
     return _users_mine(client, "meals", {"limit": 100, "search": ""})
 
 
-def _nutrition_per(contents: dict, divisor: float = 1.0) -> dict:
+def nutrition_per(contents: dict, divisor: float = 1.0) -> dict:
     def per(value):
         return None if value is None else value / divisor
 
@@ -94,7 +95,7 @@ def _food_details(client) -> list[tuple[str, dict]]:
                 shown,
                 {
                     "id": food.get("id"),
-                    "nutrition": _nutrition_per(food.get("nutritional_contents") or {}),
+                    "nutrition": nutrition_per(food.get("nutritional_contents") or {}),
                 },
             )
         )
@@ -137,7 +138,7 @@ def _recipe_details(client) -> list[tuple[str, dict]]:
                 {
                     "recipe_id": recipe.get("id"),
                     "recipe_servings": servings,
-                    "nutrition": _nutrition_per(
+                    "nutrition": nutrition_per(
                         recipe.get("nutritional_contents") or {}, servings
                     ),
                 },
@@ -147,18 +148,26 @@ def _recipe_details(client) -> list[tuple[str, dict]]:
 
 
 KINDS = {
-    "foods": Kind("food", "my_foods", _food_details, {"id": None, "nutrition": None}),
+    "foods": Kind(
+        "food",
+        "my_foods",
+        _food_details,
+        {"id": None, "nutrition": None},
+        frozenset({"nutrition", "brand", "serving_size", "serving_unit"}),
+    ),
     "meals": Kind(
         "meal",
         "meals",
         _meal_details,
         {"meal_id": None, "ingredients": None, "nutrition": None},
+        frozenset({"meal", "date"}),
     ),
     "recipes": Kind(
         "recipe",
         "recipes",
         _recipe_details,
         {"recipe_id": None, "recipe_servings": None, "nutrition": None},
+        frozenset({"servings", "ingredients"}),
     ),
 }
 
@@ -170,6 +179,13 @@ def kinds(kind: str) -> list[str]:
     if plural not in KINDS:
         raise ValueError(f"kind must be one of: all, {', '.join(KINDS)}")
     return [plural]
+
+
+def single_kind(kind: str) -> str:
+    plurals = kinds(kind)
+    if len(plurals) != 1:
+        raise ValueError("kind must be one of: food, meal, recipe")
+    return plurals[0]
 
 
 def _tab_row(tr, kind: str) -> dict | None:
