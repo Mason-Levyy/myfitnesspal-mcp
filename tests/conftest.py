@@ -92,6 +92,11 @@ def make_response():
 
 
 @pytest.fixture
+def diary_with_adds():
+    return diary_after_add
+
+
+@pytest.fixture
 def search_html():
     return (FIXTURES / "search.html").read_text()
 
