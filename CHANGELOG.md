@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `fitness_list_custom` lists your custom foods, saved meals and recipes
+  with their ids, servings and nutrition, and `fitness_log_custom` logs one
+  by name (a saved meal logs as its ingredients). None of these show up in
+  food search.
+- `fitness_delete_custom` deletes a custom food, saved meal or recipe by
+  exact name. It deletes nothing when it can't tell which item a name means.
+- Food log results include `added_entries`: the diary entries MyFitnessPal
+  actually added, read back from the diary.
+
+### Changed
+
+- A food log that adds nothing to the diary now fails with an error instead
+  of reporting success. MyFitnessPal answers `/food/add` with 200 for any
+  `food_id`/`weight_id`, so a stale or invented id used to look logged.
+  Each log reads the day's diary once more to check. When
+  `fitness_modify_food`'s replacement adds nothing, the error says the
+  original entry was already removed. When the read-back itself fails, the
+  log fails with an error that says the food may already be in the diary,
+  and the session refresh does not re-send the add. In `fitness_modify_food`
+  that error also says the original entry was removed.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

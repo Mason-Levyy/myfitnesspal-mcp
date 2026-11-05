@@ -1,9 +1,10 @@
 import asyncio
+import datetime
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from myfitnesspal_mcp import diary, mfp_client, server
+from myfitnesspal_mcp import diary, food_logging, mfp_client, server
 from myfitnesspal_mcp.store import Store
 
 
@@ -173,7 +174,8 @@ def test_log_food_with_explicit_ids(connected):
         )
     )
     assert result["source"] == "ids"
-    _, _, kwargs = connected.session.calls[-1]
+    adds = [c for c in connected.session.calls if c[0] == "POST" and "food/add" in c[1]]
+    _, _, kwargs = adds[-1]
     assert kwargs["data"]["food_entry[weight_id]"] == "20"
 
 
@@ -251,6 +253,51 @@ def test_failed_refresh_after_write_warns_instead_of_raising(connected, monkeypa
     assert len(posts_to(connected, "food/remove")) == 1
 
 
+@pytest.fixture
+def refreshed_days(connected, monkeypatch):
+    days = []
+    monkeypatch.setattr(
+        server.sync, "refresh_day", lambda store, client, day: days.append(day)
+    )
+    return days
+
+
+def test_modify_food_refreshes_the_day_when_the_replacement_adds_nothing(
+    connected, refreshed_days, diary_html, make_response
+):
+    connected.session.route("GET", "food/diary?date=", make_response(text=diary_html))
+    with pytest.raises(food_logging.NothingLogged, match="Removed 'Coffee"):
+        asyncio.run(
+            server.fitness_modify_food(
+                query="coffee", new_query="banana", date="2026-07-08", ctx=FakeContext()
+            )
+        )
+    assert refreshed_days == [datetime.date(2026, 7, 8)]
+
+
+def test_log_food_refreshes_the_day_when_the_read_back_fails(
+    connected, refreshed_days, diary_html, make_response
+):
+    def diary_page(calls):
+        if any(m == "POST" and "food/add" in url for m, url, _ in calls):
+            raise RuntimeError("diary page did not load")
+        return make_response(text=diary_html)
+
+    connected.session.route("GET", "food/diary?date=", diary_page)
+    with pytest.raises(food_logging.UnverifiedAdd):
+        asyncio.run(
+            server.fitness_log_food(
+                query="Banana",
+                food_id="111",
+                weight_id="20",
+                date="2026-07-08",
+                ctx=FakeContext(),
+            )
+        )
+    assert refreshed_days == [datetime.date(2026, 7, 8)]
+    assert len(posts_to(connected, "food/add")) == 1
+
+
 def test_pin_tools(local_store):
     local_store.set_pin("banana", "111", "10", "Banana", "1 medium")
     local_store.set_pin("oats", "333", "40", "Oats", None)
@@ -313,6 +360,7 @@ def test_tools_that_remove_or_overwrite_are_marked_destructive():
         "fitness_delete_food",
         "fitness_delete_exercise",
         "fitness_modify_food",
+        "fitness_delete_custom",
     ]:
         assert tools[name].annotations.destructive_hint, name
     assert not tools["fitness_log_food"].annotations.destructive_hint
