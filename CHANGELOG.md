@@ -11,6 +11,31 @@ All notable changes to this project are documented here. The format follows
 - `fitness_complete_day` reports whether a diary day is marked complete, or
   marks it complete or reopens it, as the website's "Complete This Entry"
   button does. A bare call only reports.
+- Day records (`fitness_get_day`, the `day` in write results, and
+  `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
+  `remaining` (goal minus logged; negative means over the goal).
+
+### Changed
+
+- The cache database gains three `day_nutrition` columns (`goal_protein`,
+  `goal_carbs`, `goal_fat`), added in place on first start. No refetch
+  happens on upgrade, so days cached by an earlier release show null
+  protein, carbs and fat goals in `fitness_bulk_export` until
+  `fitness_get_day` or a write refetches them.
+- Food log results include `added_entries`: the diary entries MyFitnessPal
+  actually added, read back from the diary.
+
+### Changed
+
+- A food log that adds nothing to the diary now fails with an error instead
+  of reporting success. MyFitnessPal answers `/food/add` with 200 for any
+  `food_id`/`weight_id`, so a stale or invented id used to look logged.
+  Each log reads the day's diary once more to check. When
+  `fitness_modify_food`'s replacement adds nothing, the error says the
+  original entry was already removed. When the read-back itself fails, the
+  log fails with an error that says the food may already be in the diary,
+  and the session refresh does not re-send the add. In `fitness_modify_food`
+  that error also says the original entry was removed.
 
 ## [0.5.0] - 2026-11-03
 

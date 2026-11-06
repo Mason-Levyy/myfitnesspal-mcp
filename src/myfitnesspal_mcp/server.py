@@ -131,10 +131,22 @@ async def refresh_after_write(ctx: Context, day: datetime.date) -> dict:
     return {}
 
 
+async def add_with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> dict:
+    try:
+        return await with_session(ctx, op)
+    except food_logging.UnconfirmedAdd as exc:
+        await refresh_after_write(ctx, exc.day)
+        raise
+
+
 @mcp.tool(title="Get day summary", annotations=READS_MFP)
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
     local feel note for a day.
+
+    `goals` are the day's MyFitnessPal targets (calories, protein, carbs, fat)
+    and `remaining` is goal minus what is logged (negative: over the goal);
+    null where MyFitnessPal has no goal.
 
     date: YYYY-MM-DD (default: today).
     """
@@ -250,6 +262,13 @@ async def fitness_log_food(
     to pick from. With food_id + weight_id (from fitness_search_food): logs
     exactly that item, `query` being its display name.
 
+    A logged result lists `added_entries` (meal, name): what MyFitnessPal
+    actually put in the diary. MyFitnessPal accepts any food_id, so if the
+    names are not the food you meant, delete them. An error saying no entry
+    was added means nothing was logged. An error saying the diary could not
+    be read back means the food may be logged: check with fitness_get_day
+    before logging it again.
+
     meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
     on the account. quantity: number of servings (default 1).
     date: YYYY-MM-DD (default today).
@@ -290,7 +309,7 @@ async def fitness_log_food(
             )
         raise ValueError("pass draft_id + option, food_id + weight_id, or query")
 
-    result = await with_session(ctx, op)
+    result = await add_with_session(ctx, op)
     if not result.get("logged"):
         return {"ok": True, **result}
     refresh_warning = await refresh_after_write(
@@ -392,7 +411,7 @@ async def fitness_modify_food(
             serving=serving,
         )
 
-    result = await with_session(ctx, op)
+    result = await add_with_session(ctx, op)
     if result.get("needs_choice"):
         return {"ok": True, **result}
     return {"ok": True, **result, **await refresh_after_write(ctx, day)}
@@ -614,8 +633,8 @@ async def fitness_bulk_export(
     ctx: Context = None,
 ) -> dict:
     """Export a whole date range at once for analysis: per-day nutrition
-    totals, food entries with macros, the MyFitnessPal daily note, and local
-    feel notes. Read-only.
+    totals, goals and remaining, food entries with macros, the MyFitnessPal
+    daily note, and local feel notes. Read-only.
 
     start/end: YYYY-MM-DD (default: last 30 days ending today).
     sync_first: gap-fill from MyFitnessPal before exporting. Off by default so
