@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_list_custom` lists your custom foods, saved meals and recipes
+  with their ids, servings and nutrition, and `fitness_log_custom` logs one
+  by name (a saved meal logs as its ingredients). None of these show up in
+  food search.
 - Day records (`fitness_get_day`, the `day` in write results, and
   `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
   `remaining` (goal minus logged; negative means over the goal).
