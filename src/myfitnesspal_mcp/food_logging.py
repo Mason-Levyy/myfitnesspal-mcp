@@ -10,7 +10,11 @@ DEFAULT_MEAL = "breakfast"
 BARE_QUERY_LIMIT = 10
 
 
-class DraftNotFound(RuntimeError):
+class DraftNotFound(DiaryLookupError):
+    pass
+
+
+class NoFoodFound(DiaryLookupError):
     pass
 
 
@@ -121,7 +125,7 @@ def draft_food(
     if pin:
         _include_pin(candidates, pin)
     if not candidates:
-        raise RuntimeError(f"no MyFitnessPal food found for '{query}'")
+        raise NoFoodFound(f"no MyFitnessPal food found for '{query}'")
     options = rank_candidates(
         candidates,
         query,

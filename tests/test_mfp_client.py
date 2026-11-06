@@ -65,6 +65,11 @@ def test_is_auth_error_matches_expired_language():
     assert not mfp_client.is_auth_error(RuntimeError("no food found"))
 
 
+def test_bad_arguments_quoting_an_auth_word_are_not_auth_errors():
+    exc = ValueError("unknown water unit 'token'; use one of: ml, l, cup, fl_oz")
+    assert not mfp_client.is_auth_error(exc)
+
+
 def test_renew_session_reports_whether_nextauth_renewed(client, make_response):
     client.session.route(
         "GET",

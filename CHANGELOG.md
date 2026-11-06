@@ -24,9 +24,6 @@ All notable changes to this project are documented here. The format follows
   `fitness_get_day` or a write refetches them.
 - Food log results include `added_entries`: the diary entries MyFitnessPal
   actually added, read back from the diary.
-
-### Changed
-
 - A food log that adds nothing to the diary now fails with an error instead
   of reporting success. MyFitnessPal answers `/food/add` with 200 for any
   `food_id`/`weight_id`, so a stale or invented id used to look logged.
@@ -36,6 +33,13 @@ All notable changes to this project are documented here. The format follows
   log fails with an error that says the food may already be in the diary,
   and the session refresh does not re-send the add. In `fitness_modify_food`
   that error also says the original entry was removed.
+
+### Fixed
+
+- A food search, draft id, or other argument containing a word like "session"
+  or "token" no longer sets off a session refresh and a misleading "session
+  expired" error. The tool now reports the actual problem, such as no food
+  found, an expired draft, or an unknown water unit.
 
 ## [0.5.0] - 2026-11-03
 

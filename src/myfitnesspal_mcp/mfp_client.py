@@ -49,7 +49,7 @@ _AUTH_ERROR_PATTERN = re.compile(
 def is_auth_error(exc: Exception) -> bool:
     if isinstance(exc, (NotConnectedError, diary.DiarySignedOut)):
         return True
-    if isinstance(exc, entry_matching.DiaryLookupError):
+    if isinstance(exc, (entry_matching.DiaryLookupError, ValueError)):
         return False
     return bool(_AUTH_ERROR_PATTERN.search(str(exc)))
 

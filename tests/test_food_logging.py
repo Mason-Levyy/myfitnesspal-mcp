@@ -325,3 +325,20 @@ def test_log_exact_does_not_retry_when_the_read_back_fails(
 def test_nothing_logged_never_triggers_a_session_refresh():
     exc = food_logging.NothingLogged("Session Token Shake: added no entry", TODAY)
     assert not mfp_client.is_auth_error(exc)
+
+
+def test_no_food_found_quoting_an_auth_word_never_triggers_a_session_refresh(
+    client, store, make_response
+):
+    client.session.route("GET", "food/search", make_response(text="<html></html>"))
+    with pytest.raises(food_logging.NoFoodFound, match="'session'") as raised:
+        food_logging.draft_food(client, store, "session", TODAY)
+    assert not mfp_client.is_auth_error(raised.value)
+
+
+def test_missing_draft_quoting_an_auth_word_never_triggers_a_session_refresh(
+    client, store
+):
+    with pytest.raises(food_logging.DraftNotFound, match="'token'") as raised:
+        food_logging.log_from_draft(client, store, "token", 1)
+    assert not mfp_client.is_auth_error(raised.value)
