@@ -41,15 +41,10 @@ def test_username_read_from_profile(client, make_response):
         "v2/users/user-1?",
         make_response(json_data={"item": {"username": "pal"}}),
     )
-    assert mfp_client.resolve_username(client, "override") == "pal"
+    assert mfp_client.resolve_username(client) == "pal"
     url = client.session.calls[-1][1]
     assert url.startswith("https://api.myfitnesspal.com/v2/users/user-1?")
     assert "fields%5B%5D=account" in url
-
-
-def test_username_override_used_when_profile_fails(client, make_response):
-    client.session.route("GET", "v2/users/", make_response(status_code=500))
-    assert mfp_client.resolve_username(client, "injected-name") == "injected-name"
 
 
 def test_saved_username_used_when_profile_fails(client, make_response, monkeypatch):
@@ -68,6 +63,11 @@ def test_no_username_anywhere_asks_for_one(client, make_response, monkeypatch):
 def test_is_auth_error_matches_expired_language():
     assert mfp_client.is_auth_error(RuntimeError("401 Unauthorized"))
     assert not mfp_client.is_auth_error(RuntimeError("no food found"))
+
+
+def test_bad_arguments_quoting_an_auth_word_are_not_auth_errors():
+    exc = ValueError("unknown water unit 'token'; use one of: ml, l, cup, fl_oz")
+    assert not mfp_client.is_auth_error(exc)
 
 
 def test_renew_session_reports_whether_nextauth_renewed(client, make_response):

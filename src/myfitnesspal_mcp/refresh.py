@@ -54,10 +54,9 @@ def _visit_and_harvest(seed_cookies: dict[str, str] | None) -> dict[str, str]:
             page = context.pages[0]
             page.goto(MFP_URL, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(SETTLE_MS)
-            harvested = {}
-            for cookie in context.cookies(MFP_URL):
-                harvested[cookie["name"]] = cookie["value"]
-            return harvested
+            return {
+                cookie["name"]: cookie["value"] for cookie in context.cookies(MFP_URL)
+            }
         finally:
             context.close()
 
@@ -75,8 +74,6 @@ _completed_refreshes = 0
 
 
 def refresh_session() -> None:
-    """Rotate the session by revisiting MFP in the seeded headless browser
-    profile, then persist the fresh cookies and drop the cached client."""
     global _completed_refreshes
     refreshes_seen = _completed_refreshes
     with _refresh_lock:

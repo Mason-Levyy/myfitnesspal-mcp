@@ -97,6 +97,12 @@ POPULATED_DAY_QUERIES = (
     "AND body IS NOT NULL AND body != ''",
 )
 
+PIN_SELECT = "SELECT query, food_id, weight_id, name, serving, updated_at FROM food_pin"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 def trend_column(metric: str) -> str:
     column = TREND_COLUMNS.get(metric)
@@ -149,7 +155,6 @@ class Store:
         self._migrate()
 
     def _migrate(self) -> None:
-        """Bring databases created by older releases up to the current schema."""
         columns = {
             row["name"] for row in self.conn.execute("PRAGMA table_info(day_nutrition)")
         }
@@ -203,15 +208,6 @@ class Store:
         self.conn.commit()
 
     @_serialized
-    def nutrition(self, day: str) -> dict | None:
-        return _nutrition_view(self._nutrition_row(day))
-
-    def _nutrition_row(self, day: str) -> sqlite3.Row | None:
-        return self.conn.execute(
-            "SELECT * FROM day_nutrition WHERE day = ?", (day,)
-        ).fetchone()
-
-    @_serialized
     def replace_diary(self, day: str, entries: list[dict]) -> None:
         self.conn.execute("DELETE FROM diary_entry WHERE day = ?", (day,))
         self.conn.executemany(
@@ -220,14 +216,14 @@ class Store:
             [
                 (
                     day,
-                    e.get("meal"),
-                    e.get("name"),
-                    e.get("calories"),
-                    e.get("protein"),
-                    e.get("carbs"),
-                    e.get("fat"),
+                    entry.get("meal"),
+                    entry.get("name"),
+                    entry.get("calories"),
+                    entry.get("protein"),
+                    entry.get("carbs"),
+                    entry.get("fat"),
                 )
-                for e in entries
+                for entry in entries
             ],
         )
         self.conn.commit()
@@ -239,7 +235,7 @@ class Store:
             "WHERE day = ? ORDER BY id",
             (day,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(row) for row in rows]
 
     @_serialized
     def set_feel(self, day: str, note: str | None, rating: int | None) -> dict:
@@ -285,7 +281,7 @@ class Store:
             "WHERE day >= ? AND day <= ? AND diary_synced = 1",
             (start, end),
         ).fetchall()
-        return {r["day"] for r in rows}
+        return {row["day"] for row in rows}
 
     @_serialized
     def trend(self, metric: str, start: str, end: str) -> list[dict]:
@@ -294,11 +290,13 @@ class Store:
             "WHERE day >= ? AND day <= ? AND value IS NOT NULL ORDER BY day",
             (start, end),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(row) for row in rows]
 
     @_serialized
     def day_record(self, day: str) -> dict:
-        row = self._nutrition_row(day)
+        row = self.conn.execute(
+            "SELECT * FROM day_nutrition WHERE day = ?", (day,)
+        ).fetchone()
         nutrition = _nutrition_view(row)
         goals = {
             name: row[f"goal_{name}"] if row is not None else None
@@ -336,11 +334,11 @@ class Store:
         return row["value"]
 
     @_serialized
-    def mark_synced(self, day: date | None = None) -> None:
+    def mark_synced(self, day: date) -> None:
         self.conn.execute(
             "INSERT INTO meta (key, value) VALUES ('last_synced_on', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            ((day or date.today()).isoformat(),),
+            (day.isoformat(),),
         )
         self.conn.commit()
 
@@ -352,43 +350,35 @@ class Store:
         weight_id: str,
         name: str | None,
         serving: str | None,
-    ) -> dict:
-        pin = {
-            "query": normalize_query(query),
-            "food_id": str(food_id),
-            "weight_id": str(weight_id),
-            "name": name,
-            "serving": serving,
-            "updated_at": _utc_now().isoformat(),
-        }
+    ) -> None:
         self.conn.execute(
             "INSERT INTO food_pin (query, food_id, weight_id, name, serving, "
-            "updated_at) VALUES (:query, :food_id, :weight_id, :name, :serving, "
-            ":updated_at) ON CONFLICT(query) DO UPDATE SET "
+            "updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(query) DO UPDATE SET "
             "food_id = excluded.food_id, weight_id = excluded.weight_id, "
             "name = excluded.name, serving = excluded.serving, "
             "updated_at = excluded.updated_at",
-            pin,
+            (
+                normalize_query(query),
+                str(food_id),
+                str(weight_id),
+                name,
+                serving,
+                _utc_now().isoformat(),
+            ),
         )
         self.conn.commit()
-        return pin
 
     @_serialized
     def pin(self, query: str) -> dict | None:
         row = self.conn.execute(
-            "SELECT query, food_id, weight_id, name, serving, updated_at "
-            "FROM food_pin WHERE query = ?",
-            (normalize_query(query),),
+            f"{PIN_SELECT} WHERE query = ?", (normalize_query(query),)
         ).fetchone()
         return _row_to_dict(row)
 
     @_serialized
     def pins(self) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT query, food_id, weight_id, name, serving, updated_at "
-            "FROM food_pin ORDER BY query"
-        ).fetchall()
-        return [dict(pin_row) for pin_row in rows]
+        rows = self.conn.execute(f"{PIN_SELECT} ORDER BY query").fetchall()
+        return [dict(row) for row in rows]
 
     @_serialized
     def clear_pin(self, query: str) -> bool:
@@ -431,7 +421,3 @@ class Store:
         if (now or _utc_now()) - created_at > DRAFT_LIFETIME:
             return None
         return json.loads(row["body"])
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
