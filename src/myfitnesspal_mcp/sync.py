@@ -73,7 +73,7 @@ def refresh_day(store: Store, client, day: date) -> None:
         key,
         **macros(nutrition_totals(logged["foods"])),
         water_ml=water.get_water_ml(client, day),
-        goal_calories=first_number(logged["goals"], "calories"),
+        **{f"goal_{key}": value for key, value in macros(logged["goals"]).items()},
     )
 
     store.replace_diary(
