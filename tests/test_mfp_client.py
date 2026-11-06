@@ -41,15 +41,10 @@ def test_username_read_from_profile(client, make_response):
         "v2/users/user-1?",
         make_response(json_data={"item": {"username": "pal"}}),
     )
-    assert mfp_client.resolve_username(client, "override") == "pal"
+    assert mfp_client.resolve_username(client) == "pal"
     url = client.session.calls[-1][1]
     assert url.startswith("https://api.myfitnesspal.com/v2/users/user-1?")
     assert "fields%5B%5D=account" in url
-
-
-def test_username_override_used_when_profile_fails(client, make_response):
-    client.session.route("GET", "v2/users/", make_response(status_code=500))
-    assert mfp_client.resolve_username(client, "injected-name") == "injected-name"
 
 
 def test_saved_username_used_when_profile_fails(client, make_response, monkeypatch):

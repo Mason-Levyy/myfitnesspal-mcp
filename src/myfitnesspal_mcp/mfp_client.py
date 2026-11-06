@@ -64,23 +64,16 @@ class CurlCffiClient:
     BASE_URL_SECURE = "https://www.myfitnesspal.com/"
     BASE_API_URL = "https://api.myfitnesspal.com/"
 
-    def __init__(
-        self,
-        cookiejar: CookieJar,
-        username: str | None = None,
-        impersonate: str | None = None,
-    ):
-        self.session = cffi_requests.Session(
-            impersonate=impersonate or config.impersonate()
-        )
-        self.session.cookies.update(cookiejar)
-        self.loaded_cookies: dict[str, str] = {}
-        self.saved_cookies: dict[str, str] = {}
-        self.session_renewed = True
+    def __init__(self, cookies: dict[str, str]):
+        self.session = cffi_requests.Session(impersonate=config.impersonate())
+        self.session.cookies.update(cookies_to_jar(cookies))
+        self.loaded_cookies = dict(cookies)
+        self.saved_cookies = dict(cookies)
         token = fetch_auth_token(self)
         self.access_token: str = token["access_token"]
         self.user_id: str = token["user_id"]
-        self.effective_username = resolve_username(self, username)
+        self.effective_username = resolve_username(self)
+        self.session_renewed = renew_session(self)
 
 
 def fetch_auth_token(client) -> dict:
@@ -98,7 +91,7 @@ def fetch_auth_token(client) -> dict:
     return resp.json()
 
 
-def resolve_username(client, override: str | None = None) -> str:
+def resolve_username(client) -> str:
     """MFP's v2 users endpoint 500s for some accounts; fall back to the
     configured username, which is all the diary URLs need."""
     query = parse.urlencode([("fields[]", field) for field in PROFILE_FIELDS])
@@ -109,7 +102,7 @@ def resolve_username(client, override: str | None = None) -> str:
             return username
     except Exception as exc:
         logger.debug("profile lookup failed, using the saved username: %s", exc)
-    username = override or auth.saved_username()
+    username = auth.saved_username()
     if not username:
         raise ProfileUnavailable(
             "Authenticated, but couldn't read your MyFitnessPal profile. "
@@ -145,20 +138,6 @@ def cookies_to_jar(cookies: dict[str, str]) -> CookieJar:
     return jar
 
 
-def build_client(
-    cookies: dict[str, str],
-    username: str | None = None,
-    impersonate: str | None = None,
-) -> CurlCffiClient:
-    client = CurlCffiClient(
-        cookies_to_jar(cookies), username=username, impersonate=impersonate
-    )
-    client.loaded_cookies = dict(cookies)
-    client.saved_cookies = dict(cookies)
-    client.session_renewed = renew_session(client)
-    return client
-
-
 def renew_session(client) -> bool:
     """Signing in through remember_me never re-issues the session token;
     reading the NextAuth session does, good for another 30 days."""
@@ -186,7 +165,7 @@ def get_client() -> CurlCffiClient:
     if not cookies:
         raise NotConnectedError(RECONNECT_HINT)
     try:
-        _client = build_client(cookies)
+        _client = CurlCffiClient(cookies)
     except Exception as exc:
         raise NotConnectedError(f"{RECONNECT_HINT} (auth failed: {exc})") from exc
     session_persistence.persist_session(_client)

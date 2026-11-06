@@ -13,10 +13,15 @@ TOKEN = "eyJ" + "a" * 200 + ".b.c.d"
 def test_clipboard_waits_past_other_text_for_a_token(monkeypatch):
     clipboard = iter(["pbpaste | uv run mfp-mcp auth", "some=thing; else=1", TOKEN])
     connected = []
-    monkeypatch.setattr(auth, "connect", lambda cookies: connected.append(cookies) or 0)
     monkeypatch.setattr(paste.time, "sleep", lambda seconds: None)
 
-    assert paste.auth_from_clipboard(read_clipboard_text=lambda: next(clipboard)) == 0
+    assert (
+        paste.auth_from_clipboard(
+            lambda cookies: connected.append(cookies) or 0,
+            read_clipboard_text=lambda: next(clipboard),
+        )
+        == 0
+    )
     assert connected == [{auth.SESSION_COOKIE: TOKEN}]
 
 
@@ -29,10 +34,14 @@ def test_clipboard_skips_a_rejected_token_until_a_new_one(monkeypatch):
         tried_tokens.append(cookies[auth.SESSION_COOKIE])
         return 0 if tried_tokens[-1] == fresh else 1
 
-    monkeypatch.setattr(auth, "connect", fake_connect)
     monkeypatch.setattr(paste.time, "sleep", lambda seconds: None)
 
-    assert paste.auth_from_clipboard(read_clipboard_text=lambda: next(clipboard)) == 0
+    assert (
+        paste.auth_from_clipboard(
+            fake_connect, read_clipboard_text=lambda: next(clipboard)
+        )
+        == 0
+    )
     assert tried_tokens == [stale, fresh]
 
 
@@ -40,7 +49,13 @@ def test_clipboard_unreadable_points_to_pasting(capsys):
     def no_pbpaste():
         raise FileNotFoundError("pbpaste")
 
-    assert paste.auth_from_clipboard(read_clipboard_text=no_pbpaste) == 1
+    def unexpected_connect(cookies):
+        raise AssertionError("nothing to connect with")
+
+    assert (
+        paste.auth_from_clipboard(unexpected_connect, read_clipboard_text=no_pbpaste)
+        == 1
+    )
     assert "paste the cookie instead" in capsys.readouterr().err
 
 
