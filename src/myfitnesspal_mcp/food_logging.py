@@ -342,6 +342,19 @@ def _replace_entry(
     return {"removed": removed["removed"], **added}
 
 
+def _replacement_choices(draft: dict) -> dict:
+    return {
+        "removed": None,
+        "logged": None,
+        "needs_choice": True,
+        "next_step": (
+            "nothing was changed; call fitness_modify_food again with the "
+            "same query plus draft_id and option"
+        ),
+        **draft,
+    }
+
+
 def modify_food(
     client,
     store,
@@ -389,16 +402,7 @@ def modify_food(
             limit=BARE_QUERY_LIMIT,
             search_results=search_results,
         )
-        return {
-            "removed": None,
-            "logged": None,
-            "needs_choice": True,
-            "next_step": (
-                "nothing was changed; call fitness_modify_food again with the "
-                "same query plus draft_id and option"
-            ),
-            **draft,
-        }
+        return _replacement_choices(draft)
     result = _replace_entry(
         client,
         day,
