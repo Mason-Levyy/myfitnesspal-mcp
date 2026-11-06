@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fitness_complete_day` reports whether a diary day is marked complete, or
+  marks it complete or reopens it, as the website's "Complete This Entry"
+  button does. A bare call only reports.
 - Day records (`fitness_get_day`, the `day` in write results, and
   `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
   `remaining` (goal minus logged; negative means over the goal).
