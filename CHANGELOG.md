@@ -12,6 +12,17 @@ All notable changes to this project are documented here. The format follows
   with their ids, servings and nutrition, and `fitness_log_custom` logs one
   by name (a saved meal logs as its ingredients). None of these show up in
   food search.
+- Day records (`fitness_get_day`, the `day` in write results, and
+  `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
+  `remaining` (goal minus logged; negative means over the goal).
+
+### Changed
+
+- The cache database gains three `day_nutrition` columns (`goal_protein`,
+  `goal_carbs`, `goal_fat`), added in place on first start. No refetch
+  happens on upgrade, so days cached by an earlier release show null
+  protein, carbs and fat goals in `fitness_bulk_export` until
+  `fitness_get_day` or a write refetches them.
 - Food log results include `added_entries`: the diary entries MyFitnessPal
   actually added, read back from the diary.
 

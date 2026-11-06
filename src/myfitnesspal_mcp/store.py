@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     water_ml REAL,
     weight REAL,
     goal_calories REAL,
-    diary_synced INTEGER NOT NULL DEFAULT 0
+    diary_synced INTEGER NOT NULL DEFAULT 0,
+    goal_protein REAL,
+    goal_carbs REAL,
+    goal_fat REAL
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +73,12 @@ NUTRITION_FIELDS = (
     "water_ml",
     "weight",
     "goal_calories",
+    "goal_protein",
+    "goal_carbs",
+    "goal_fat",
 )
+
+GOAL_MACROS = ("calories", "protein", "carbs", "fat")
 
 TREND_COLUMNS = {
     "weight": "weight",
@@ -95,6 +103,24 @@ def trend_column(metric: str) -> str:
     if column is None:
         raise ValueError(f"unknown metric (use {' | '.join(TREND_COLUMNS)})")
     return column
+
+
+def _nutrition_view(row: sqlite3.Row | None) -> dict | None:
+    if row is None:
+        return None
+    return {
+        column: row[column]
+        for column in (
+            "day",
+            "calories",
+            "protein",
+            "carbs",
+            "fat",
+            "water_ml",
+            "weight",
+            "goal_calories",
+        )
+    }
 
 
 def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
@@ -141,6 +167,10 @@ class Store:
                 "OR goal_calories IS NOT NULL"
             )
             self.conn.commit()
+        for column in ("goal_protein", "goal_carbs", "goal_fat"):
+            if column not in columns:
+                self.conn.execute(f"ALTER TABLE day_nutrition ADD COLUMN {column} REAL")
+        self.conn.commit()
 
     @_serialized
     def upsert_nutrition(self, day: str, **fields) -> None:
@@ -174,12 +204,12 @@ class Store:
 
     @_serialized
     def nutrition(self, day: str) -> dict | None:
-        row = self.conn.execute(
-            "SELECT day, calories, protein, carbs, fat, water_ml, weight, "
-            "goal_calories FROM day_nutrition WHERE day = ?",
-            (day,),
+        return _nutrition_view(self._nutrition_row(day))
+
+    def _nutrition_row(self, day: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM day_nutrition WHERE day = ?", (day,)
         ).fetchone()
-        return _row_to_dict(row)
 
     @_serialized
     def replace_diary(self, day: str, entries: list[dict]) -> None:
@@ -268,9 +298,22 @@ class Store:
 
     @_serialized
     def day_record(self, day: str) -> dict:
+        row = self._nutrition_row(day)
+        nutrition = _nutrition_view(row)
+        goals = {
+            name: row[f"goal_{name}"] if row is not None else None
+            for name in GOAL_MACROS
+        }
+        logged = nutrition or {}
+        remaining = {
+            name: None if goal is None else round(goal - (logged.get(name) or 0.0), 1)
+            for name, goal in goals.items()
+        }
         return {
             "day": day,
-            "nutrition": self.nutrition(day),
+            "nutrition": nutrition,
+            "goals": goals,
+            "remaining": remaining,
             "diary": self.diary(day),
             "note": self.note(day),
             "feel": self.feel(day),
