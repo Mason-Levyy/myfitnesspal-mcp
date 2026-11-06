@@ -239,6 +239,30 @@ def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
     assert len(_posts_to(banana_details, "food/add")) == 1
 
 
+@pytest.mark.parametrize(
+    ("choice", "error", "message"),
+    [
+        ({"draft_id": "gone", "option": 1}, food_logging.DraftNotFound, "expired"),
+        ({"option": 99}, ValueError, "option must be between"),
+        ({"option": 1, "serving": 9}, ValueError, "serving must be between"),
+    ],
+)
+def test_modify_checks_the_draft_choice_before_touching_the_diary(
+    banana_details, store, choice, error, message
+):
+    draft = food_logging.draft_food(banana_details, store, "banana", TODAY)
+    with pytest.raises(error, match=message):
+        food_logging.modify_food(
+            banana_details,
+            store,
+            TODAY,
+            "breakfast",
+            query="coffee",
+            **{"draft_id": draft["draft_id"], **choice},
+        )
+    assert _food_adds(banana_details) == []
+
+
 EXACT_FOOD = {
     "food_id": "111",
     "weight_id": "10",

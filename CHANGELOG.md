@@ -36,6 +36,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `fitness_modify_food` with an expired draft, or an out-of-range `option` or
+  `serving`, now fails before touching the diary. It used to delete the entry
+  first, then fail with an error that didn't mention the deletion. If this
+  happened to you, the entry is missing from that day and needs logging again.
 - A food search, draft id, or other argument containing a word like "session"
   or "token" no longer sets off a session refresh and a misleading "session
   expired" error. The tool now reports the actual problem, such as no food

@@ -216,19 +216,9 @@ def log_exact(
     }
 
 
-def log_from_draft(
-    client,
-    store,
-    draft_id: str,
-    option: int,
-    *,
-    serving: int | None = None,
-    quantity: float | None = None,
-    meal: str | None = None,
-    day: date | None = None,
-    pin: bool = True,
-    page: tuple | None = None,
-) -> dict:
+def _draft_choice(
+    store, draft_id: str, option: int, serving: int | None
+) -> tuple[dict, dict]:
     body = store.draft(draft_id)
     if body is None:
         raise DraftNotFound(
@@ -246,6 +236,21 @@ def log_from_draft(
         "name": chosen["name"],
         "serving": serving_label,
     }
+    return body, food
+
+
+def _log_choice(
+    client,
+    store,
+    body: dict,
+    food: dict,
+    *,
+    quantity: float | None,
+    meal: str | None,
+    day: date | None,
+    pin: bool = True,
+    page: tuple | None = None,
+) -> dict:
     result = log_exact(
         client,
         food,
@@ -256,9 +261,31 @@ def log_from_draft(
     )
     if pin:
         store.set_pin(
-            body["query"], chosen["food_id"], weight_id, chosen["name"], serving_label
+            body["query"],
+            food["food_id"],
+            food["weight_id"],
+            food["name"],
+            food["serving"],
         )
     return {**result, "source": "draft", "pinned": pin}
+
+
+def log_from_draft(
+    client,
+    store,
+    draft_id: str,
+    option: int,
+    *,
+    serving: int | None = None,
+    quantity: float | None = None,
+    meal: str | None = None,
+    day: date | None = None,
+    pin: bool = True,
+) -> dict:
+    body, food = _draft_choice(store, draft_id, option, serving)
+    return _log_choice(
+        client, store, body, food, quantity=quantity, meal=meal, day=day, pin=pin
+    )
 
 
 def _unambiguous_food(
@@ -371,17 +398,17 @@ def modify_food(
     if draft_id is not None:
         if option is None:
             raise ValueError("option is required with draft_id")
+        body, food = _draft_choice(store, draft_id, option, serving)
         return _replace_entry(
             client,
             day,
             meal,
             query=query,
-            log_replacement=lambda page: log_from_draft(
+            log_replacement=lambda page: _log_choice(
                 client,
                 store,
-                draft_id,
-                option,
-                serving=serving,
+                body,
+                food,
                 quantity=quantity,
                 meal=meal,
                 day=day,
