@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from myfitnesspal_mcp import food_logging
+from myfitnesspal_mcp import diary, food_logging, mfp_client
 from myfitnesspal_mcp.food_ranking import MacroTargets
 
 TODAY = datetime.date(2026, 7, 8)
@@ -197,10 +197,12 @@ def test_modify_replaces_with_exact_match_using_one_diary_fetch(banana_details, 
     assert result["source"] == "exact_match"
     assert len(_posts_to(banana_details, "food/remove")) == 1
     assert len(_posts_to(banana_details, "food/add")) == 1
-    diary_fetches = [
-        url for _, url, _ in banana_details.session.calls if "food/diary" in url
-    ]
-    assert len(diary_fetches) == 1
+    calls = banana_details.session.calls
+    first_add = next(i for i, c in enumerate(calls) if "food/add" in c[1])
+    fetches_before_add = [c for c in calls[:first_add] if "food/diary" in c[1]]
+    fetches_after_add = [c for c in calls[first_add:] if "food/diary" in c[1]]
+    assert len(fetches_before_add) == 1
+    assert len(fetches_after_add) == 1
 
 
 def test_modify_uses_pin_for_replacement(client, store):
@@ -235,3 +237,91 @@ def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
     assert confirmed["source"] == "draft"
     assert len(_posts_to(banana_details, "food/remove")) == 1
     assert len(_posts_to(banana_details, "food/add")) == 1
+
+
+EXACT_FOOD = {
+    "food_id": "111",
+    "weight_id": "10",
+    "name": "Banana",
+    "serving": "1 medium",
+}
+
+
+def test_log_exact_reports_the_entries_mfp_added(client):
+    result = food_logging.log_exact(client, EXACT_FOOD, TODAY, "snacks", quantity=1.0)
+    assert result["logged"] == "Banana"
+    assert result["added_entries"] == [
+        {"meal": "snacks", "name": "Added Food, 1 serving"}
+    ]
+
+
+def test_log_exact_raises_when_the_diary_did_not_change(
+    client, diary_html, make_response
+):
+    client.session.route("GET", "food/diary?date=", make_response(text=diary_html))
+    with pytest.raises(food_logging.NothingLogged, match="added no entry"):
+        food_logging.log_exact(client, EXACT_FOOD, TODAY, "snacks", quantity=1.0)
+
+
+def test_modify_says_the_original_is_gone_when_the_replacement_adds_nothing(
+    banana_details, store, diary_html, make_response
+):
+    banana_details.session.route(
+        "GET", "food/diary?date=", make_response(text=diary_html)
+    )
+    with pytest.raises(food_logging.NothingLogged) as raised:
+        food_logging.modify_food(
+            banana_details,
+            store,
+            TODAY,
+            "breakfast",
+            query="coffee",
+            new_query="banana",
+        )
+    assert "Removed 'Coffee, 1 cup' from breakfast" in str(raised.value)
+    assert "log it again to restore it" in str(raised.value)
+
+
+def test_modify_says_the_original_is_gone_when_the_read_back_fails(
+    banana_details, store, diary_html, make_response
+):
+    def diary_page(calls):
+        if any(m == "POST" and "food/add" in url for m, url, _ in calls):
+            raise diary.DiarySignedOut("diary page has no meal sections")
+        return make_response(text=diary_html)
+
+    banana_details.session.route("GET", "food/diary?date=", diary_page)
+    with pytest.raises(food_logging.UnverifiedAdd) as raised:
+        food_logging.modify_food(
+            banana_details,
+            store,
+            TODAY,
+            "breakfast",
+            query="coffee",
+            new_query="banana",
+        )
+    assert "Removed 'Coffee, 1 cup' from breakfast" in str(raised.value)
+    assert "before logging it again" in str(raised.value)
+    assert not mfp_client.is_auth_error(raised.value)
+    assert len(_posts_to(banana_details, "food/add")) == 1
+
+
+def test_log_exact_does_not_retry_when_the_read_back_fails(
+    client, diary_html, make_response
+):
+    def diary_page(calls):
+        if any(m == "POST" and "food/add" in url for m, url, _ in calls):
+            raise diary.DiarySignedOut("diary page has no meal sections")
+        return make_response(text=diary_html)
+
+    client.session.route("GET", "food/diary?date=", diary_page)
+    with pytest.raises(food_logging.UnverifiedAdd) as raised:
+        food_logging.log_exact(client, EXACT_FOOD, TODAY, "snacks", quantity=1.0)
+    assert "before logging it again" in str(raised.value)
+    assert not mfp_client.is_auth_error(raised.value)
+    assert len(_posts_to(client, "food/add")) == 1
+
+
+def test_nothing_logged_never_triggers_a_session_refresh():
+    exc = food_logging.NothingLogged("Session Token Shake: added no entry", TODAY)
+    assert not mfp_client.is_auth_error(exc)
