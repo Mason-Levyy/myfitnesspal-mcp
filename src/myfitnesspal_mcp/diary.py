@@ -39,12 +39,18 @@ def _header_label(header_row, position: int) -> str:
     return name or f"Meal {position + 1}"
 
 
-def meal_headers(doc) -> list[str]:
-    header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
-    return [_header_label(row, position) for position, row in enumerate(header_rows)]
+def _meal_header_rows(doc: lh.HtmlElement) -> list[lh.HtmlElement]:
+    return [row for row in doc.xpath("//tr") if _is_meal_header(row)]
 
 
-def resolve_meal(doc, meal: str) -> tuple[str, str]:
+def meal_headers(doc: lh.HtmlElement) -> list[str]:
+    return [
+        _header_label(row, position)
+        for position, row in enumerate(_meal_header_rows(doc))
+    ]
+
+
+def resolve_meal(doc: lh.HtmlElement, meal: str) -> tuple[str, str]:
     headers = meal_headers(doc)
     target = normalize_meal(meal)
     for position, header in enumerate(headers):
@@ -83,11 +89,11 @@ def read_day(client, day: date) -> dict:
     return {"foods": logged_foods(doc), "goals": daily_goals(doc)}
 
 
-def _nutrient_columns(doc) -> list[str]:
-    headers = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
-    return (
-        [column_name(cell) for cell in headers[0].xpath("./td")[1:]] if headers else []
-    )
+def _nutrient_columns(doc: lh.HtmlElement) -> list[str]:
+    headers = _meal_header_rows(doc)
+    if not headers:
+        return []
+    return [column_name(cell) for cell in headers[0].xpath("./td")[1:]]
 
 
 def _nutrient_value(cell) -> float:
@@ -110,21 +116,20 @@ def _food_name(cell) -> str:
     return (anchors[0] if anchors else cell).text_content().strip()
 
 
-def logged_foods(doc) -> list[dict]:
+def logged_foods(doc: lh.HtmlElement) -> list[dict]:
     columns = _nutrient_columns(doc)
-    header_rows = [row for row in doc.xpath("//tr") if _is_meal_header(row)]
     return [
         {
             "meal": _header_label(header, position),
             "name": _food_name(row.xpath("./td")[0]),
             "nutrition": _nutrition(row, columns),
         }
-        for position, header in enumerate(header_rows)
+        for position, header in enumerate(_meal_header_rows(doc))
         for row in rows_until_classed(header.getnext())
     ]
 
 
-def daily_goals(doc) -> dict[str, float]:
+def daily_goals(doc: lh.HtmlElement) -> dict[str, float]:
     """The goals row follows the first "total" row, under the meal columns."""
     totals = doc.xpath("//tr[@class='total']")
     goals = totals[0].getnext() if totals else None
@@ -162,7 +167,7 @@ def push_food(
     require_status(resp, "/food/add", (200, 204))
 
 
-def diary_entries(doc) -> list[dict]:
+def diary_entries(doc: lh.HtmlElement) -> list[dict]:
     entries = []
     current_meal = None
     meal_position = -1

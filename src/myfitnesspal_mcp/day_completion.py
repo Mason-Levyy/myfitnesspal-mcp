@@ -1,6 +1,9 @@
 from datetime import date
 
+from lxml import html as lh
+
 from . import diary
+from .entry_matching import collapse_whitespace
 from .mfp_web import form_headers, require_status, site_url
 
 
@@ -9,7 +12,7 @@ def _completion_box(doc):
     return boxes[0] if boxes else None
 
 
-def is_complete(box) -> bool | None:
+def is_complete(box: lh.HtmlElement | None) -> bool | None:
     if box is None:
         return None
     if box.xpath(".//a[contains(@href, 'day_incomplete')]"):
@@ -23,8 +26,7 @@ def _message(box) -> str | None:
     if is_complete(box) is not True:
         return None
     button = " ".join(box.xpath(".//a/text()"))
-    text = " ".join(box.text_content().replace(button, " ").split())
-    return text or None
+    return collapse_whitespace(box.text_content().replace(button, " ")) or None
 
 
 def _state(day: date, box, *, changed: bool) -> dict:

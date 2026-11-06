@@ -1,7 +1,6 @@
 import logging
 import re
 from http.cookiejar import Cookie, CookieJar
-from urllib import parse
 
 from curl_cffi import requests as cffi_requests
 
@@ -94,8 +93,7 @@ def fetch_auth_token(client) -> dict:
 def resolve_username(client) -> str:
     """MFP's v2 users endpoint 500s for some accounts; fall back to the
     configured username, which is all the diary URLs need."""
-    query = parse.urlencode([("fields[]", field) for field in PROFILE_FIELDS])
-    url = parse.urljoin(client.BASE_API_URL, f"v2/users/{client.user_id}?{query}")
+    url = mfp_web.api_url(client, f"users/{client.user_id}", fields=PROFILE_FIELDS)
     try:
         username = (mfp_web.get_json(client, url) or {})["item"].get("username")
         if username:

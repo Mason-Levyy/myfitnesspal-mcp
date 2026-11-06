@@ -4,6 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from myfitnesspal_mcp import mfp_client
+from myfitnesspal_mcp.store import Store
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -135,8 +138,6 @@ def client(search_html, diary_html):
 
 @pytest.fixture
 def store(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
     return Store(tmp_path / "test.db")
 
 
@@ -145,7 +146,6 @@ def jar_client():
     """Builds a client whose cookie jar looks the way curl_cffi leaves it after
     a sign-in: the loaded cookies on .myfitnesspal.com, with MFP's own sets,
     each (name, value, domain, expires), beside them."""
-    from myfitnesspal_mcp import mfp_client
 
     def build(loaded, set_by_mfp=()):
         jar = mfp_client.cookies_to_jar(loaded)

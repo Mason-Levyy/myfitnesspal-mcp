@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import date
 
@@ -6,6 +7,7 @@ from .entry_matching import DiaryLookupError
 from .food_ranking import MacroTargets, normalize_query, rank_candidates
 
 DEFAULT_MEAL = "breakfast"
+BARE_QUERY_LIMIT = 10
 
 
 class DraftNotFound(RuntimeError):
@@ -100,18 +102,19 @@ def _draft_view(draft_id: str, body: dict) -> dict:
     }
 
 
-def _build_draft(
+def draft_food(
     client,
     store,
     query: str,
     day: date,
     *,
-    meal: str,
-    quantity: float,
-    targets: MacroTargets,
-    limit: int,
+    meal: str = DEFAULT_MEAL,
+    quantity: float = 1.0,
+    targets: MacroTargets | None = None,
+    limit: int = 10,
     search_results: list[dict] | None = None,
-) -> tuple[str, dict]:
+) -> dict:
+    targets = targets or MacroTargets()
     targets.validate()
     pin = store.pin(query)
     candidates = food_search.food_candidates(client, query, limit, search_results)
@@ -139,31 +142,7 @@ def _build_draft(
         },
         "options": options,
     }
-    return store.save_draft(body), body
-
-
-def draft_food(
-    client,
-    store,
-    query: str,
-    day: date,
-    *,
-    meal: str = DEFAULT_MEAL,
-    quantity: float = 1.0,
-    targets: MacroTargets | None = None,
-    limit: int = 10,
-) -> dict:
-    draft_id, body = _build_draft(
-        client,
-        store,
-        query,
-        day,
-        meal=meal,
-        quantity=quantity,
-        targets=targets or MacroTargets(),
-        limit=limit,
-    )
-    return _draft_view(draft_id, body)
+    return _draft_view(store.save_draft(body), body)
 
 
 def _chosen_serving(option: dict, serving: int | None) -> tuple[str, str | None]:
@@ -233,26 +212,6 @@ def log_exact(
     }
 
 
-def _log_option(
-    client,
-    option: dict,
-    serving: int | None,
-    day: date,
-    *,
-    meal: str,
-    quantity: float,
-    page: tuple | None,
-) -> dict:
-    weight_id, label = _chosen_serving(option, serving)
-    food = {
-        "food_id": option["food_id"],
-        "weight_id": weight_id,
-        "name": option["name"],
-        "serving": label,
-    }
-    return log_exact(client, food, day, meal, quantity=quantity, page=page)
-
-
 def log_from_draft(
     client,
     store,
@@ -276,27 +235,26 @@ def log_from_draft(
     if not 1 <= option <= len(options):
         raise ValueError(f"option must be between 1 and {len(options)}")
     chosen = options[option - 1]
-    result = _log_option(
+    weight_id, serving_label = _chosen_serving(chosen, serving)
+    food = {
+        "food_id": chosen["food_id"],
+        "weight_id": weight_id,
+        "name": chosen["name"],
+        "serving": serving_label,
+    }
+    result = log_exact(
         client,
-        chosen,
-        serving,
+        food,
         day or date.fromisoformat(body["day"]),
-        meal=meal or body["meal"],
+        meal or body["meal"],
         quantity=body["quantity"] if quantity is None else quantity,
         page=page,
     )
     if pin:
         store.set_pin(
-            body["query"],
-            chosen["food_id"],
-            result["weight_id"],
-            chosen["name"],
-            result["serving"],
+            body["query"], chosen["food_id"], weight_id, chosen["name"], serving_label
         )
     return {**result, "source": "draft", "pinned": pin}
-
-
-BARE_QUERY_LIMIT = 10
 
 
 def _unambiguous_food(
@@ -338,23 +296,31 @@ def log_by_query(
     if food:
         result = log_exact(client, food, day, meal, quantity=quantity)
         return {**result, "source": food["source"]}
-    draft_id, body = _build_draft(
+    draft = draft_food(
         client,
         store,
         query,
         day,
         meal=meal,
         quantity=quantity,
-        targets=MacroTargets(),
         limit=BARE_QUERY_LIMIT,
         search_results=search_results,
     )
-    return {"logged": None, "needs_choice": True, **_draft_view(draft_id, body)}
+    return {"logged": None, "needs_choice": True, **draft}
 
 
-def _replace(removed: dict, log_replacement) -> dict:
+def _replace_entry(
+    client,
+    day: date,
+    meal: str,
+    *,
+    query: str,
+    log_replacement: Callable[[tuple], dict],
+) -> dict:
+    page = diary.diary_page(client, day)
+    removed = diary.delete_food(client, day, query, meal, page=page)
     try:
-        added = log_replacement()
+        added = log_replacement(page)
     except NothingLogged as exc:
         raise NothingLogged(
             f"Removed {removed['removed']!r} from {removed['meal']}, but the "
@@ -388,11 +354,12 @@ def modify_food(
     if draft_id is not None:
         if option is None:
             raise ValueError("option is required with draft_id")
-        page = diary.diary_page(client, day)
-        removed = diary.delete_food(client, day, query, meal, page=page)
-        return _replace(
-            removed,
-            lambda: log_from_draft(
+        return _replace_entry(
+            client,
+            day,
+            meal,
+            query=query,
+            log_replacement=lambda page: log_from_draft(
                 client,
                 store,
                 draft_id,
@@ -408,14 +375,13 @@ def modify_food(
     chosen_quantity = 1.0 if quantity is None else quantity
     food, search_results = _unambiguous_food(client, store, replacement_query)
     if food is None:
-        draft_id, body = _build_draft(
+        draft = draft_food(
             client,
             store,
             replacement_query,
             day,
             meal=meal,
             quantity=chosen_quantity,
-            targets=MacroTargets(),
             limit=BARE_QUERY_LIMIT,
             search_results=search_results,
         )
@@ -427,12 +393,15 @@ def modify_food(
                 "nothing was changed; call fitness_modify_food again with the "
                 "same query plus draft_id and option"
             ),
-            **_draft_view(draft_id, body),
+            **draft,
         }
-    page = diary.diary_page(client, day)
-    removed = diary.delete_food(client, day, query, meal, page=page)
-    result = _replace(
-        removed,
-        lambda: log_exact(client, food, day, meal, quantity=chosen_quantity, page=page),
+    result = _replace_entry(
+        client,
+        day,
+        meal,
+        query=query,
+        log_replacement=lambda page: log_exact(
+            client, food, day, meal, quantity=chosen_quantity, page=page
+        ),
     )
     return {**result, "source": food["source"]}
