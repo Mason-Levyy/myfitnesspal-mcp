@@ -44,6 +44,10 @@ class FakeSession:
         self.calls.append(("POST", url, kwargs))
         return self._match("POST", url)
 
+    def delete(self, url, **kwargs):
+        self.calls.append(("DELETE", url, kwargs))
+        return self._match("DELETE", url)
+
 
 class FakeClient:
     BASE_URL_SECURE = "https://www.myfitnesspal.com/"
@@ -89,6 +93,11 @@ def diary_after_add(before_html, new_row=ADDED_ROW):
 @pytest.fixture
 def make_response():
     return FakeResponse
+
+
+@pytest.fixture
+def diary_with_adds():
+    return diary_after_add
 
 
 @pytest.fixture

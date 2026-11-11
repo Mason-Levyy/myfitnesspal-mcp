@@ -14,6 +14,17 @@ All notable changes to this project are documented here. The format follows
 - Day records (`fitness_get_day`, the `day` in write results, and
   `fitness_bulk_export`) include `goals` (calories, protein, carbs, fat) and
   `remaining` (goal minus logged; negative means over the goal).
+- `fitness_list_custom` lists your custom foods, saved meals and recipes
+  with their ids, servings and nutrition, and `fitness_log_custom` logs one
+  by name (a saved meal logs as its ingredients). None of these show up in
+  food search.
+- `fitness_create_custom` creates a private custom food, a saved meal (from
+  what is logged in one meal of a day, like the website's "Remember Meal"),
+  or a recipe. It refuses a name already used by an item of the same kind.
+- `fitness_search_food` candidates include `external_id`, which
+  `fitness_create_custom` takes for each recipe ingredient.
+- `fitness_delete_custom` deletes a custom food, saved meal or recipe by
+  exact name. It deletes nothing when it can't tell which item a name means.
 
 ### Changed
 
