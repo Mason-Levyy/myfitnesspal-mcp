@@ -91,3 +91,19 @@ def no_matching_entry(
         f"no diary entry matching '{query}'{where} on {day.isoformat()}. "
         f"Entries actually logged{where}: {logged}"
     )
+
+
+LISTED_NAMES_LIMIT = 15
+
+
+def matching(options: list[dict], wanted: str, key: str) -> list[dict]:
+    target = collapse_whitespace(wanted).lower()
+    exact = [option for option in options if option[key].lower() == target]
+    return exact or [option for option in options if target in option[key].lower()]
+
+
+def listed_names(pool: list[dict], more_hint: str = "") -> str:
+    listed = "; ".join(repr(item["name"]) for item in pool[:LISTED_NAMES_LIMIT])
+    if len(pool) > LISTED_NAMES_LIMIT:
+        listed += f"; … {len(pool) - LISTED_NAMES_LIMIT} more{more_hint}"
+    return listed or "(none)"
