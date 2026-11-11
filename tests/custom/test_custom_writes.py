@@ -56,8 +56,17 @@ def create(client, kind, name, **fields):
     return custom_writes.create_custom(client, kind, name, day=TODAY, **fields)
 
 
-def test_create_food_posts_a_private_v2_food(client, make_response):
+@pytest.fixture
+def food_api(client, make_response):
+    client.session.route(
+        "GET", "api/services/users/foods/mine", make_response(json_data=[])
+    )
     client.session.route("POST", "v2/foods", make_response(json_data=OAT_BAR))
+    return client
+
+
+def test_create_food_posts_a_private_v2_food(food_api):
+    client = food_api
     result = create(
         client,
         "food",
@@ -88,6 +97,37 @@ def test_create_food_posts_a_private_v2_food(client, make_response):
         "fiber": 4,
     }
     assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
+
+
+def test_create_food_refuses_a_name_already_used(food_api, make_response, my_food):
+    food_api.session.route(
+        "GET",
+        "api/services/users/foods/mine",
+        make_response(json_data=[my_food("5", "Home", "Oat  Bar", 210)]),
+    )
+    with pytest.raises(custom_writes.InvalidItem, match="'Home - Oat Bar' already"):
+        create(food_api, "food", "oat bar", nutrition=OAT_BAR_NUTRITION, brand="home")
+    assert not posts(food_api, "v2/foods")
+
+
+def test_create_food_allows_the_same_name_under_another_brand(
+    food_api, make_response, my_food
+):
+    food_api.session.route(
+        "GET",
+        "api/services/users/foods/mine",
+        make_response(json_data=[my_food("5", "Store", "Oat bar", 210)]),
+    )
+    create(food_api, "food", "Oat bar", nutrition=OAT_BAR_NUTRITION, brand="Home")
+    assert len(posts(food_api, "v2/foods")) == 1
+
+
+def test_create_food_refuses_a_zero_or_non_numeric_serving_size(client):
+    with pytest.raises(ValueError, match="serving_size must be above zero"):
+        create(client, "food", "Bar", nutrition=OAT_BAR_NUTRITION, serving_size=0)
+    with pytest.raises(ValueError, match="serving_size must be above zero"):
+        create(client, "food", "Bar", nutrition=OAT_BAR_NUTRITION, serving_size="2")
+    assert not client.session.calls
 
 
 def test_create_food_rejects_missing_negative_or_unknown_values(client):
@@ -296,6 +336,25 @@ def test_create_recipe_refuses_an_ingredient_quantity_that_is_not_positive(recip
     assert not posts(recipe_api, "v2/recipes")
 
 
+def test_create_recipe_counts_a_null_ingredient_quantity_as_one(recipe_api):
+    custom_writes.create_recipe(
+        recipe_api,
+        "Bread",
+        1,
+        [{"external_id": "999", "serving": "cup", "quantity": None}],
+    )
+    assert recipe_lines(recipe_api)["ingredients"][0]["servings"] == 1
+
+
+def test_create_recipe_refuses_a_non_numeric_quantity_before_any_request(recipe_api):
+    for quantity in ("two", True):
+        with pytest.raises(ValueError, match="quantity must be above 0"):
+            custom_writes.create_recipe(
+                recipe_api, "Bread", 1, [{"external_id": "999", "quantity": quantity}]
+            )
+    assert not [c for c in recipe_api.session.calls if "v2/foods/999" in c[1]]
+
+
 def test_create_recipe_needs_ingredients_and_servings(client):
     with pytest.raises(ValueError, match="at least one ingredient"):
         custom_writes.create_recipe(client, "Empty", 2, [])
@@ -309,9 +368,9 @@ def test_search_food_returns_the_external_id(client):
     assert candidate["external_id"] == "999"
 
 
-def test_create_custom_tool_passes_its_arguments(client, monkeypatch, make_response):
+def test_create_custom_tool_passes_its_arguments(food_api, monkeypatch):
+    client = food_api
     monkeypatch.setattr(server.mfp_client, "get_client", lambda: client)
-    client.session.route("POST", "v2/foods", make_response(json_data=OAT_BAR))
     result = asyncio.run(
         server.fitness_create_custom(
             kind="food", name="Oat bar", nutrition=OAT_BAR_NUTRITION, serving_unit="bar"

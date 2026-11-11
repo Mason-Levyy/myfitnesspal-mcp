@@ -32,6 +32,10 @@ class InvalidItem(DiaryLookupError):
     pass
 
 
+def _positive(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
 def _food_item(
     name: str, nutrition: dict, brand: str | None, serving_size: float, unit: str
 ) -> dict:
@@ -78,15 +82,20 @@ def create_food(
     serving_unit: str = "serving",
 ) -> dict:
     unit = collapse_whitespace(serving_unit or "")
-    if not serving_size or serving_size <= 0 or not unit:
+    if not _positive(serving_size) or not unit:
         raise ValueError("serving_size must be above zero and serving_unit set")
+    brand_name = collapse_whitespace(brand or "")
     item = _food_item(
-        name,
-        _food_nutrition(nutrition),
-        collapse_whitespace(brand or "") or None,
-        serving_size,
-        unit,
+        name, _food_nutrition(nutrition), brand_name or None, serving_size, unit
     )
+    shown = f"{brand_name} - {name}" if brand_name else name
+    taken = [
+        existing
+        for existing, _ in KINDS["foods"].read_details(client)
+        if existing.lower() == shown.lower()
+    ]
+    if taken:
+        raise InvalidItem(f"a custom food named {taken[0]!r} already exists")
     resp = client.session.post(
         api_url(client, "foods"),
         data=json.dumps({"items": [item]}),
@@ -177,6 +186,13 @@ def _recipe_line(client, ingredient: dict) -> dict:
         raise InvalidItem(
             "each ingredient needs an external_id from a fitness_search_food result"
         )
+    quantity = ingredient.get("quantity")
+    if quantity is None:
+        quantity = 1
+    if not _positive(quantity):
+        raise ValueError(
+            f"ingredient {external_id} quantity must be above 0, not {quantity!r}"
+        )
     resp = client.session.get(
         api_url(client, f"foods/{external_id}"),
         params=[("fields[]", "serving_sizes"), ("fields[]", "nutritional_contents")],
@@ -193,11 +209,6 @@ def _recipe_line(client, ingredient: dict) -> dict:
     if not sizes:
         raise InvalidItem(f"food {external_id} has no serving sizes to measure it by")
     chosen = _ingredient_serving(external_id, sizes, ingredient.get("serving"))
-    quantity = ingredient.get("quantity", 1)
-    if quantity <= 0:
-        raise ValueError(
-            f"ingredient {external_id} quantity must be above 0, not {quantity}"
-        )
     return {
         "food": {"id": food["id"], "version": food["version"]},
         "serving_size": {
@@ -212,7 +223,7 @@ def _recipe_line(client, ingredient: dict) -> dict:
 def create_recipe(
     client, title: str, servings: float | None, ingredients: list[dict] | None
 ) -> dict:
-    if not servings or servings <= 0:
+    if not _positive(servings):
         raise ValueError("servings must be above zero")
     if not ingredients:
         raise ValueError("a recipe needs at least one ingredient")
@@ -254,13 +265,13 @@ def create_custom(client, kind: str, name: str, *, day: date, **fields) -> dict:
     if not title:
         raise ValueError("name is required")
     if plural == "foods":
+        sizes = {
+            key: fields[key]
+            for key in ("serving_size", "serving_unit")
+            if fields.get(key) is not None
+        }
         made = create_food(
-            client,
-            title,
-            fields.get("nutrition"),
-            brand=fields.get("brand"),
-            serving_size=fields.get("serving_size") or 1,
-            serving_unit=fields.get("serving_unit") or "serving",
+            client, title, fields.get("nutrition"), brand=fields.get("brand"), **sizes
         )
     elif plural == "meals":
         if not fields.get("meal"):

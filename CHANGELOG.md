@@ -20,7 +20,7 @@ All notable changes to this project are documented here. The format follows
   food search.
 - `fitness_create_custom` creates a private custom food, a saved meal (from
   what is logged in one meal of a day, like the website's "Remember Meal"),
-  or a recipe.
+  or a recipe. It refuses a name already used by an item of the same kind.
 - `fitness_search_food` candidates include `external_id`, which
   `fitness_create_custom` takes for each recipe ingredient.
 

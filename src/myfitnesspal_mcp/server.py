@@ -400,8 +400,8 @@ async def fitness_create_custom(
     ctx: Context = None,
 ) -> dict:
     """Create a private custom food, saved meal or recipe in MyFitnessPal. Log
-    it afterwards with fitness_log_custom. Refuses a meal or recipe name that
-    already exists, and arguments that don't apply to `kind`. kind: food |
+    it afterwards with fitness_log_custom. Refuses a name that already exists
+    for that kind, and arguments that don't apply to `kind`. kind: food |
     meal | recipe (plural forms also work).
 
     kind=food: nutrition {calories, protein, carbs, fat, and optionally fiber,
