@@ -239,6 +239,30 @@ def test_modify_ambiguous_replacement_deletes_nothing(banana_details, store):
     assert len(_posts_to(banana_details, "food/add")) == 1
 
 
+@pytest.mark.parametrize(
+    ("choice", "error", "message"),
+    [
+        ({"draft_id": "gone", "option": 1}, food_logging.DraftNotFound, "expired"),
+        ({"option": 99}, ValueError, "option must be between"),
+        ({"option": 1, "serving": 9}, ValueError, "serving must be between"),
+    ],
+)
+def test_modify_checks_the_draft_choice_before_touching_the_diary(
+    banana_details, store, choice, error, message
+):
+    draft = food_logging.draft_food(banana_details, store, "banana", TODAY)
+    with pytest.raises(error, match=message):
+        food_logging.modify_food(
+            banana_details,
+            store,
+            TODAY,
+            "breakfast",
+            query="coffee",
+            **{"draft_id": draft["draft_id"], **choice},
+        )
+    assert _food_adds(banana_details) == []
+
+
 EXACT_FOOD = {
     "food_id": "111",
     "weight_id": "10",
@@ -325,3 +349,20 @@ def test_log_exact_does_not_retry_when_the_read_back_fails(
 def test_nothing_logged_never_triggers_a_session_refresh():
     exc = food_logging.NothingLogged("Session Token Shake: added no entry", TODAY)
     assert not mfp_client.is_auth_error(exc)
+
+
+def test_no_food_found_quoting_an_auth_word_never_triggers_a_session_refresh(
+    client, store, make_response
+):
+    client.session.route("GET", "food/search", make_response(text="<html></html>"))
+    with pytest.raises(food_logging.NoFoodFound, match="'session'") as raised:
+        food_logging.draft_food(client, store, "session", TODAY)
+    assert not mfp_client.is_auth_error(raised.value)
+
+
+def test_missing_draft_quoting_an_auth_word_never_triggers_a_session_refresh(
+    client, store
+):
+    with pytest.raises(food_logging.DraftNotFound, match="'token'") as raised:
+        food_logging.log_from_draft(client, store, "token", 1)
+    assert not mfp_client.is_auth_error(raised.value)

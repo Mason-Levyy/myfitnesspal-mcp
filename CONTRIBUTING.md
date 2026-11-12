@@ -46,16 +46,22 @@ To exercise the server against a real account, follow the
 | --- | --- |
 | `src/myfitnesspal_mcp/server.py` | MCP tool definitions (`fitness_*`) |
 | `src/myfitnesspal_mcp/food_logging.py` | Draft, confirm, and pin flow for logging food |
+| `src/myfitnesspal_mcp/food_ranking.py` | Ranking food candidates against macro targets (pure functions) |
 | `src/myfitnesspal_mcp/diary.py` | Food diary meals, entries, and adding/removing food |
 | `src/myfitnesspal_mcp/entry_matching.py` | Matching a query to logged food or exercise entries |
 | `src/myfitnesspal_mcp/food_search.py` | Food search and per-food details |
-| `src/myfitnesspal_mcp/measurements.py`, `water.py`, `notes.py`, `exercise.py` | One module per remaining MFP diary feature |
+| `src/myfitnesspal_mcp/day_completion.py`, `measurements.py`, `water.py`, `notes.py`, `exercise.py` | One module per remaining MFP diary feature |
 | `src/myfitnesspal_mcp/mfp_web.py` | Request plumbing shared by the MFP endpoint modules |
+| `src/myfitnesspal_mcp/diary_tables.py` | Reading the diary and exercise tables |
 | `src/myfitnesspal_mcp/mfp_client.py` | `curl_cffi` session with a Chrome TLS fingerprint |
-| `src/myfitnesspal_mcp/auth.py` | Cookie capture, storage, and validation |
+| `src/myfitnesspal_mcp/auth.py` | Cookie parsing and storage |
+| `src/myfitnesspal_mcp/auth_command.py` | The `auth` CLI command |
+| `src/myfitnesspal_mcp/paste.py` | Reading a pasted or copied cookie |
+| `src/myfitnesspal_mcp/session_persistence.py` | Saving the cookies MFP re-issues |
 | `src/myfitnesspal_mcp/refresh.py` | Headless-browser session refresh |
 | `src/myfitnesspal_mcp/store.py` | Local SQLite cache |
 | `src/myfitnesspal_mcp/sync.py` | Gap-fill sync from MFP into the cache |
+| `src/myfitnesspal_mcp/config.py` | Environment variables and file paths |
 | `src/myfitnesspal_mcp/cli.py` | `mfp-mcp` entry point |
 | `tests/` | Pytest suite with synthetic HTML/JSON fixtures |
 
@@ -102,8 +108,8 @@ Add read/write for the MyFitnessPal daily diary note
 
 ## Capturing MyFitnessPal endpoints
 
-If MFP changes an endpoint, or you have found how a missing feature (such as
-water logging) works, the most useful thing you can share is the request shape:
+If MFP changes an endpoint, or you have found how a missing feature works, the
+most useful thing you can share is the request shape:
 
 1. Open DevTools → Network on myfitnesspal.com and perform the action.
 2. Note the method, URL, request headers that matter (CSRF token name, content
@@ -116,9 +122,8 @@ water logging) works, the most useful thing you can share is the request shape:
 Releases are cut automatically. Bump `version` in `pyproject.toml`, the two
 version fields in `server.json`, `version` in `plugin/.claude-plugin/plugin.json`,
 and the `mfp-mcp==X.Y.Z` pin in `plugin/.mcp.json` together (CI fails if they
-drift), move the
-**Unreleased** section of `CHANGELOG.md` under the new version, and merge to
-`main`. The publish workflow tags `vX.Y.Z`, creates a GitHub release, publishes
+drift), move the **Unreleased** section of `CHANGELOG.md` under the new version,
+and merge to `main`. The publish workflow tags `vX.Y.Z`, creates a GitHub release, publishes
 to PyPI via trusted publishing, and pushes to the MCP Registry.
 
 ## License

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from myfitnesspal_mcp.store import Store
+
 
 def test_reads_never_see_a_half_replaced_diary():
-    from myfitnesspal_mcp.store import Store
-
     store = Store(Path(":memory:"))
     day = "2026-07-01"
     entries = [{"meal": "Lunch", "name": f"Item {index}"} for index in range(3)]
@@ -34,7 +34,7 @@ def test_reads_never_see_a_half_replaced_diary():
 def test_upsert_nutrition_partial_updates(store):
     store.upsert_nutrition("2026-07-01", calories=1800.0, protein=120.0)
     store.upsert_nutrition("2026-07-01", weight=80.5)
-    row = store.nutrition("2026-07-01")
+    row = store.day_record("2026-07-01")["nutrition"]
     assert row["calories"] == 1800.0
     assert row["protein"] == 120.0
     assert row["weight"] == 80.5
@@ -114,12 +114,10 @@ def test_partial_row_is_not_a_synced_diary(store):
 def test_nutrition_hides_sync_bookkeeping(store):
     store.upsert_nutrition("2026-07-01", calories=1800.0)
     store.mark_diary_synced("2026-07-01")
-    assert "diary_synced" not in store.nutrition("2026-07-01")
+    assert "diary_synced" not in store.day_record("2026-07-01")["nutrition"]
 
 
 def test_migrates_pre_diary_synced_database(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
     path = tmp_path / "old.db"
     legacy = sqlite3.connect(str(path))
     legacy.executescript(
@@ -141,7 +139,7 @@ def test_migrates_pre_diary_synced_database(tmp_path):
         "2026-07-01",
         "2026-07-02",
     }
-    assert store.nutrition("2026-07-03")["weight"] == 80.0
+    assert store.day_record("2026-07-03")["nutrition"]["weight"] == 80.0
 
 
 def test_export_range_unions_sources(store):
@@ -169,8 +167,8 @@ def test_export_range_ignores_empty_notes(store):
 
 def test_mark_synced_roundtrip(store):
     assert store.last_synced_on() is None
-    store.mark_synced()
-    assert store.last_synced_on() is not None
+    store.mark_synced(datetime.date(2026, 7, 1))
+    assert store.last_synced_on() == "2026-07-01"
 
 
 def test_pin_roundtrip_normalizes_query(store):
@@ -219,8 +217,6 @@ def test_save_draft_purges_expired_drafts(store):
 
 
 def test_existing_database_gains_pin_and_draft_tables(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
     path = tmp_path / "legacy.db"
     legacy = sqlite3.connect(path)
     legacy.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
@@ -232,8 +228,6 @@ def test_existing_database_gains_pin_and_draft_tables(tmp_path):
 
 
 def test_migration_adds_goal_columns_and_keeps_data(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
     path = tmp_path / "v043.db"
     legacy = sqlite3.connect(str(path))
     legacy.executescript(
@@ -263,8 +257,6 @@ def test_migration_adds_goal_columns_and_keeps_data(tmp_path):
 
 
 def test_day_record_reports_goals_and_remaining():
-    from myfitnesspal_mcp.store import Store
-
     store = Store(Path(":memory:"))
     store.upsert_nutrition(
         "2026-07-01",
@@ -291,8 +283,6 @@ def test_day_record_reports_goals_and_remaining():
 
 
 def test_day_record_of_an_unknown_day_has_no_goals():
-    from myfitnesspal_mcp.store import Store
-
     record = Store(Path(":memory:")).day_record("2026-07-01")
     assert record["nutrition"] is None
     assert record["goals"] == dict.fromkeys(("calories", "protein", "carbs", "fat"))

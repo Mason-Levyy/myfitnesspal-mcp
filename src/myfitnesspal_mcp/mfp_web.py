@@ -7,6 +7,13 @@ ORIGIN = "https://www.myfitnesspal.com"
 FORM_CONTENT_TYPE = "application/x-www-form-urlencoded; charset=UTF-8"
 
 
+def api_url(client, path: str, *, fields: tuple[str, ...] = ()) -> str:
+    url = parse.urljoin(client.BASE_API_URL, f"v2/{path}")
+    if not fields:
+        return url
+    return f"{url}?{parse.urlencode([('fields[]', field) for field in fields])}"
+
+
 def site_url(
     client, path: str, day: date | None = None, *, params: dict | None = None
 ) -> str:

@@ -1,5 +1,6 @@
 import logging
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, timedelta
 
@@ -13,7 +14,7 @@ _poll_lock = threading.Lock()
 
 
 @contextmanager
-def tolerating_failures(description: str):
+def tolerating_failures(description: str) -> Iterator[None]:
     """Auth failures propagate so the caller can refresh the session and retry;
     everything else is logged and skipped."""
     try:
@@ -22,23 +23,6 @@ def tolerating_failures(description: str):
         if is_auth_error(exc):
             raise
         logger.warning("%s failed: %s", description, exc)
-
-
-def as_float(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def first_number(values: dict, *keys) -> float | None:
-    for key in keys:
-        number = as_float(values.get(key))
-        if number is not None:
-            return number
-    return None
 
 
 def days_to_fetch(cached: set[str], lookback: int, today: date) -> list[date]:
@@ -50,10 +34,10 @@ def days_to_fetch(cached: set[str], lookback: int, today: date) -> list[date]:
 
 def macros(totals: dict) -> dict:
     return {
-        "calories": first_number(totals, "calories"),
-        "protein": first_number(totals, "protein"),
-        "carbs": first_number(totals, "carbohydrates", "carbs"),
-        "fat": first_number(totals, "fat"),
+        "calories": totals.get("calories"),
+        "protein": totals.get("protein"),
+        "carbs": totals.get("carbohydrates"),
+        "fat": totals.get("fat"),
     }
 
 
@@ -73,7 +57,7 @@ def refresh_day(store: Store, client, day: date) -> None:
         key,
         **macros(nutrition_totals(logged["foods"])),
         water_ml=water.get_water_ml(client, day),
-        **{f"goal_{key}": value for key, value in macros(logged["goals"]).items()},
+        **{f"goal_{name}": value for name, value in macros(logged["goals"]).items()},
     )
 
     store.replace_diary(
@@ -99,6 +83,7 @@ def poll(
     client,
     days: int | None = None,
     force: bool = False,
+    *,
     today: date | None = None,
 ) -> None:
     today = today or date.today()
@@ -124,6 +109,6 @@ def _poll_window(store: Store, client, days: int | None, today: date) -> None:
     with tolerating_failures("weight measurements"):
         weights = measurements.weight_history(client, window_start, today)
         for day, value in weights.items():
-            store.upsert_nutrition(day.isoformat(), weight=float(value))
+            store.upsert_nutrition(day.isoformat(), weight=value)
 
     store.mark_synced(today)

@@ -86,8 +86,20 @@ def _evaluate_servings(
 def _best_serving_index(servings: list[dict]) -> int | None:
     if not servings:
         return None
-    return min(
-        range(len(servings)), key=lambda index: (servings[index]["shortfall"], index)
+    return min(range(len(servings)), key=lambda index: servings[index]["shortfall"])
+
+
+def _ranking_key(option: dict) -> tuple:
+    return (
+        not option["pinned"],
+        not option["fits_targets"],
+        option["shortfall"],
+        not option["exact_match"],
+        not option["verified"],
+        option["search_rank"] is None,
+        option["search_rank"] or 0,
+        option["name"].lower(),
+        option["food_id"],
     )
 
 
@@ -136,19 +148,7 @@ def rank_candidates(
                 "servings": servings,
             }
         )
-    options.sort(
-        key=lambda option: (
-            not option["pinned"],
-            not option["fits_targets"],
-            option["shortfall"],
-            not option["exact_match"],
-            not option["verified"],
-            option["search_rank"] is None,
-            option["search_rank"] or 0,
-            option["name"].lower(),
-            option["food_id"],
-        )
-    )
+    options.sort(key=_ranking_key)
     for number, option in enumerate(options, start=1):
         option["option"] = number
     return options
