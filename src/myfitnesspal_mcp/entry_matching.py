@@ -36,7 +36,7 @@ class AmbiguousEntry(DiaryLookupError):
     ):
         self.candidates = candidates
         where = f" in {meal}" if meal else ""
-        options = "; ".join(f"{c['name']!r}" for c in candidates)
+        options = "; ".join(f"{candidate['name']!r}" for candidate in candidates)
         super().__init__(
             f"'{query}'{where} on {day.isoformat()} matches multiple diary entries: "
             f"{options}. {advice}"
@@ -45,14 +45,18 @@ class AmbiguousEntry(DiaryLookupError):
 
 def _meal_pool(entries: list[dict], meal: str | None) -> list[dict]:
     target = normalize_meal(meal)
-    return entries if target is None else [e for e in entries if e["meal"] == target]
+    if target is None:
+        return entries
+    return [entry for entry in entries if entry["meal"] == target]
 
 
 def find_entries(
     entries: list[dict], query: str, meal: str | None = None
 ) -> list[dict]:
     needle = query.lower()
-    return [e for e in _meal_pool(entries, meal) if needle in e["name"].lower()]
+    return [
+        entry for entry in _meal_pool(entries, meal) if needle in entry["name"].lower()
+    ]
 
 
 def _interchangeable(entries: list[dict]) -> bool:
@@ -72,7 +76,11 @@ def resolve_entry(
     advice: str = AMBIGUITY_ADVICE,
 ) -> dict:
     candidates = find_entries(entries, query, meal)
-    exact = [c for c in candidates if c["name"].lower() == query.lower()]
+    exact = [
+        candidate
+        for candidate in candidates
+        if candidate["name"].lower() == query.lower()
+    ]
     for pool in (exact, candidates):
         if pool and _interchangeable(pool):
             return pool[0]
@@ -86,7 +94,7 @@ def no_matching_entry(
 ) -> NoMatchingEntry:
     where = f" in {meal}" if meal else ""
     pool = _meal_pool(entries, meal)
-    logged = "; ".join(f"{e['name']!r}" for e in pool) if pool else "(nothing logged)"
+    logged = "; ".join(f"{entry['name']!r}" for entry in pool) or "(nothing logged)"
     return NoMatchingEntry(
         f"no diary entry matching '{query}'{where} on {day.isoformat()}. "
         f"Entries actually logged{where}: {logged}"

@@ -23,7 +23,7 @@ def _logged_value(cell) -> float | None:
     return parse_number(cell.text)
 
 
-def exercise_sections(doc) -> dict[str, list[dict]]:
+def exercise_sections(doc: lh.HtmlElement) -> dict[str, list[dict]]:
     sections = {}
     for table in doc.xpath("//table[@class='table0']"):
         headings = table.xpath("./thead/tr[1]/td")
@@ -55,7 +55,9 @@ def exercise_page(client, day: date) -> tuple[lh.HtmlElement, str]:
 
 
 def _field_key(heading: str) -> str:
-    words = "".join(c if c.isalnum() else " " for c in heading.lower()).split()
+    words = "".join(
+        character if character.isalnum() else " " for character in heading.lower()
+    ).split()
     return "_".join(words)
 
 
@@ -74,19 +76,19 @@ def _exercise_name(cell) -> str:
     return cell.text_content().strip()
 
 
-def exercise_entries(doc) -> list[dict]:
+def exercise_entries(doc: lh.HtmlElement) -> list[dict]:
     entries = []
     for table in doc.xpath("//table[contains(@class, 'table0')]"):
         headings = table.xpath("./thead/tr[1]/td")
         if not headings:
             continue
         section = headings[0].text_content().strip().lower()
-        field_keys = [_field_key(h.text_content()) for h in headings[1:]]
-        for tr in table.xpath("./tbody/tr[not(@class)]"):
-            delete_links = tr.xpath("./td[contains(@class, 'delete')]//a/@href")
+        field_keys = [_field_key(heading.text_content()) for heading in headings[1:]]
+        for row in table.xpath("./tbody/tr[not(@class)]"):
+            delete_links = row.xpath("./td[contains(@class, 'delete')]//a/@href")
             if not delete_links:
                 continue
-            cells = tr.xpath("./td")
+            cells = row.xpath("./td")
             entry = {
                 "entry_id": delete_links[0].split("?")[0].rstrip("/").split("/")[-1],
                 "section": section,
@@ -99,16 +101,6 @@ def exercise_entries(doc) -> list[dict]:
     return entries
 
 
-def remove_exercise_entry(client, entry_id: str, token: str) -> None:
-    post_legacy_delete(
-        client,
-        "exercise/remove",
-        entry_id,
-        token,
-        referer=_exercise_diary_url(client),
-    )
-
-
 def delete_exercise(client, day: date, query: str, all_matches: bool = False) -> dict:
     doc, token = exercise_page(client, day)
     entries = exercise_entries(doc)
@@ -119,5 +111,11 @@ def delete_exercise(client, day: date, query: str, all_matches: bool = False) ->
     else:
         targets = [resolve_entry(entries, query, None, day, advice=ALL_MATCHES_ADVICE)]
     for entry in targets:
-        remove_exercise_entry(client, entry["entry_id"], token)
+        post_legacy_delete(
+            client,
+            "exercise/remove",
+            entry["entry_id"],
+            token,
+            referer=_exercise_diary_url(client),
+        )
     return {"day": day.isoformat(), "removed": targets, "count": len(targets)}

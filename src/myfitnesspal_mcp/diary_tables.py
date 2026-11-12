@@ -1,4 +1,7 @@
 import re
+from collections.abc import Iterator
+
+from lxml import html as lh
 
 COLUMN_ALIASES = {"carbs": "carbohydrates"}
 
@@ -18,14 +21,14 @@ def parse_number(text: str | None) -> float:
         return 0
 
 
-def column_name(cell) -> str:
+def column_name(cell: lh.HtmlElement) -> str:
     """Reads the cell's own text: header cells also hold a unit subtitle
     ("Calories<div>kcal</div>"), which text_content() would run into it."""
     name = (cell.text or "").strip().lower()
     return COLUMN_ALIASES.get(name, name)
 
 
-def rows_until_classed(row):
+def rows_until_classed(row: lh.HtmlElement | None) -> Iterator[lh.HtmlElement]:
     """Logged rows carry no class; the first row that has one (a meal header,
     the "Add Food" row, totals) ends the section."""
     while row is not None and row.get("class") is None:

@@ -338,6 +338,21 @@ def test_log_water_tool_updates_remote_and_local_total(
     assert local_store.day_record("2026-07-08")["nutrition"]["water_ml"] == 1200.0
 
 
+def test_bad_input_naming_an_auth_word_reports_the_input_not_the_session(
+    connected, monkeypatch
+):
+    def explode():
+        raise AssertionError("refresh must not run")
+
+    monkeypatch.setattr(server.refresh, "refresh_session", explode)
+    with pytest.raises(ValueError, match="unknown water unit 'token'"):
+        asyncio.run(server.fitness_log_water(amount=1, unit="token", ctx=FakeContext()))
+    with pytest.raises(food_logging.DraftNotFound, match="'session'"):
+        asyncio.run(
+            server.fitness_log_food(draft_id="session", option=1, ctx=FakeContext())
+        )
+
+
 def test_tools_list_without_a_session(monkeypatch):
     def no_session():
         raise mfp_client.NotConnectedError("not connected")

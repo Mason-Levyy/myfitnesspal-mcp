@@ -1,5 +1,6 @@
 import json
 import stat
+import sys
 import time
 
 import pytest
@@ -51,11 +52,20 @@ def test_save_session_writes_a_rotation_once(cookies_file, jar_client):
 
     session_persistence.save_session(client)
     assert json.loads(cookies_file.read_text())["cookies"] == {SESSION: "rotated"}
-    assert stat.S_IMODE(cookies_file.stat().st_mode) == 0o600
 
     cookies_file.unlink()
     session_persistence.save_session(client)
     assert not cookies_file.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs POSIX file modes")
+def test_save_session_writes_an_owner_only_file(cookies_file, jar_client):
+    client = jar_client(
+        {SESSION: "pasted"}, [(SESSION, "rotated", "www.myfitnesspal.com", LATER)]
+    )
+
+    session_persistence.save_session(client)
+    assert stat.S_IMODE(cookies_file.stat().st_mode) == 0o600
 
 
 def test_save_session_leaves_the_file_alone_for_env_cookies(

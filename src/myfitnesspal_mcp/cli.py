@@ -3,7 +3,7 @@ import logging
 import sys
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="myfitnesspal-mcp",
         description="MCP server for MyFitnessPal (stdio by default).",
@@ -37,6 +37,11 @@ def main() -> None:
     parser.add_argument(
         "--port", type=int, default=8484, help="HTTP port (default 8484)"
     )
+    return parser
+
+
+def main() -> None:
+    parser = _build_parser()
     args = parser.parse_args()
 
     if args.check and args.command != "auth":
@@ -46,14 +51,11 @@ def main() -> None:
 
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 
-    if args.command == "auth" and args.check:
-        from .auth import run_check
-
-        raise SystemExit(run_check())
-
     if args.command == "auth":
-        from .auth import run_auth_flow
+        from .auth_command import run_auth_flow, run_check
 
+        if args.check:
+            raise SystemExit(run_check())
         raise SystemExit(run_auth_flow(clipboard=args.clipboard))
 
     from .server import mcp

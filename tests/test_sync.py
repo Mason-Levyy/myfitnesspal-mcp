@@ -2,6 +2,7 @@ import datetime
 import threading
 
 import pytest
+from conftest import FakeClient, FakeResponse
 
 from myfitnesspal_mcp import mfp_client, sync
 
@@ -17,12 +18,6 @@ def test_days_to_fetch_gaps_only():
 def test_days_to_fetch_always_includes_today():
     days = sync.days_to_fetch({TODAY.isoformat()}, lookback=1, today=TODAY)
     assert days == [TODAY]
-
-
-def test_first_number_prefers_first_present_key():
-    assert sync.first_number({"carbohydrates": 10}, "carbohydrates", "carbs") == 10.0
-    assert sync.first_number({"carbs": 5}, "carbohydrates", "carbs") == 5.0
-    assert sync.first_number({}, "carbohydrates", "carbs") is None
 
 
 def fake_day():
@@ -61,35 +56,16 @@ def reads_from_fake_client(monkeypatch):
     )
 
 
-class FakeNoteResponse:
-    def __init__(self, body):
-        self._body = body
-
-    def json(self):
-        return {"item": {"body": self._body}}
-
-    def raise_for_status(self):
-        pass
-
-
-class FakeNoteSession:
-    def __init__(self, body):
-        self.body = body
-
-    def get(self, url, **kwargs):
-        return FakeNoteResponse(self.body)
-
-
-class FakeSyncClient:
-    BASE_URL_SECURE = "https://www.myfitnesspal.com/"
-
-    def __init__(self, note_body="today felt great"):
+class FakeSyncClient(FakeClient):
+    def __init__(self):
+        super().__init__()
         self.fetched = []
         self.weights = {}
-        self.access_token = "fake-token"
-        self.user_id = "user-1"
-        self.effective_username = "tester"
-        self.session = FakeNoteSession(note_body)
+        self.session.route(
+            "GET",
+            "food/note",
+            FakeResponse(json_data={"item": {"body": "today felt great"}}),
+        )
 
     def read_day(self, day):
         self.fetched.append(day)
@@ -103,7 +79,7 @@ class FakeSyncClient:
 def test_refresh_day_populates_store(store):
     client = FakeSyncClient()
     sync.refresh_day(store, client, TODAY)
-    nutrition = store.nutrition(TODAY.isoformat())
+    nutrition = store.day_record(TODAY.isoformat())["nutrition"]
     assert nutrition["calories"] == 2100.0
     assert nutrition["carbs"] == 200.0
     assert nutrition["water_ml"] == 750.0
@@ -170,10 +146,11 @@ def test_concurrent_polls_fetch_once(store):
             return super().read_day(day)
 
     client = SlowClient()
-    first = threading.Thread(target=sync.poll, args=(store, client, 2, False, TODAY))
+    poll_today = {"days": 2, "today": TODAY}
+    first = threading.Thread(target=sync.poll, args=(store, client), kwargs=poll_today)
     first.start()
     assert today_fetch_started.wait(5)
-    second = threading.Thread(target=sync.poll, args=(store, client, 2, False, TODAY))
+    second = threading.Thread(target=sync.poll, args=(store, client), kwargs=poll_today)
     second.start()
     let_fetch_finish.set()
     first.join(5)
@@ -186,7 +163,7 @@ def test_poll_records_weights(store):
     client = FakeSyncClient()
     client.weights = {TODAY: 80.0, TODAY - datetime.timedelta(days=400): 90.0}
     sync.poll(store, client, days=3, force=True, today=TODAY)
-    assert store.nutrition(TODAY.isoformat())["weight"] == 80.0
+    assert store.day_record(TODAY.isoformat())["nutrition"]["weight"] == 80.0
 
 
 def test_poll_backfills_weight_for_already_cached_day(store):
@@ -207,7 +184,7 @@ def test_poll_backfills_weight_for_already_cached_day(store):
 
     assert client.fetched == [TODAY]
     assert client.measurements_earliest == window_start
-    assert store.nutrition(yesterday.isoformat())["weight"] == 79.5
+    assert store.day_record(yesterday.isoformat())["nutrition"]["weight"] == 79.5
 
 
 def test_poll_fetches_past_day_that_only_has_a_weigh_in(store):
@@ -220,7 +197,7 @@ def test_poll_fetches_past_day_that_only_has_a_weigh_in(store):
     sync.poll(store, client, days=2, force=True, today=TODAY)
 
     assert client.fetched == [TODAY, yesterday]
-    nutrition = store.nutrition(yesterday.isoformat())
+    nutrition = store.day_record(yesterday.isoformat())["nutrition"]
     assert nutrition["calories"] == 2100.0
     assert nutrition["weight"] == 80.0
 
@@ -243,13 +220,13 @@ def test_poll_retries_day_whose_fetch_failed(store):
     client = FlakyClient()
     client.weights = {yesterday: 80.0}
     sync.poll(store, client, days=2, force=True, today=TODAY)
-    assert store.nutrition(yesterday.isoformat())["calories"] is None
+    assert store.day_record(yesterday.isoformat())["nutrition"]["calories"] is None
 
     client.failing.clear()
     client.fetched.clear()
     sync.poll(store, client, days=2, force=True, today=TODAY)
     assert yesterday in client.fetched
-    assert store.nutrition(yesterday.isoformat())["calories"] == 2100.0
+    assert store.day_record(yesterday.isoformat())["nutrition"]["calories"] == 2100.0
 
 
 def test_poll_propagates_auth_errors(store):

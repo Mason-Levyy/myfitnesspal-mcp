@@ -64,6 +64,7 @@ def clipboard_session(text: str) -> dict[str, str] | None:
 
 
 def auth_from_clipboard(
+    connect: Callable[[dict[str, str]], int],
     read_clipboard_text: Callable[[], str] = read_clipboard,
     timeout: float = CLIPBOARD_TIMEOUT_SECONDS,
 ) -> int:
@@ -82,7 +83,7 @@ def auth_from_clipboard(
             return 1
         if cookies and cookies[auth.SESSION_COOKIE] not in tried_tokens:
             tried_tokens.add(cookies[auth.SESSION_COOKIE])
-            if auth.connect(cookies) == 0:
+            if connect(cookies) == 0:
                 return 0
             print("Waiting for a different cookie on the clipboard...", flush=True)
         time.sleep(CLIPBOARD_POLL_SECONDS)

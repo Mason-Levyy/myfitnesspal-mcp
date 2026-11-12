@@ -1,16 +1,17 @@
 import json
 from datetime import date
-from urllib import parse
+
+from lxml import html as lh
 
 from .diary_tables import parse_number
-from .mfp_web import api_headers, get_document, require_status, site_url
+from .mfp_web import api_headers, api_url, get_document, require_status, site_url
 
 
 def set_weight(client, day: date, value: float) -> dict:
     """Value is in the account's display unit (kg or lbs): the v2 API stores
     and echoes whatever unit the account is configured with."""
     resp = client.session.post(
-        parse.urljoin(client.BASE_API_URL, "v2/measurements"),
+        api_url(client, "measurements"),
         json={"items": [{"type": "Weight", "value": value, "date": day.isoformat()}]},
         headers=api_headers(
             client, {"Accept": "application/json", "Content-Type": "application/json"}
@@ -21,7 +22,7 @@ def set_weight(client, day: date, value: float) -> dict:
     return {"day": item["date"], "weight": item["value"], "unit": item.get("unit")}
 
 
-def page_weights(doc) -> dict[date, float]:
+def page_weights(doc: lh.HtmlElement) -> dict[date, float]:
     """The measurements page is a Next.js app: its entries sit in the
     dehydrated query cache in __NEXT_DATA__."""
     weights = {}

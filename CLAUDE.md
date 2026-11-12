@@ -41,18 +41,19 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
 - `food_logging.py` owns the draft, confirm, and pin flow for logging food.
   `food_ranking.py` ranks candidates as pure functions.
 - One module per MFP feature makes the web requests: `diary.py` (meals,
-  entries, adding and removing food), `food_search.py`, `measurements.py`,
-  `water.py`, `notes.py`, and `exercise.py`. Each function takes the client
-  first. Request plumbing they share (URLs, headers, csrf pages, status checks)
+  entries, adding and removing food), `day_completion.py`, `food_search.py`,
+  `measurements.py`, `water.py`, `notes.py`, and `exercise.py`. Each function
+  takes the client first. Request plumbing they share (URLs, headers, csrf pages, status checks)
   lives in `mfp_web.py`, reading the diary and exercise tables (column names,
   numbers, where a section ends) lives in `diary_tables.py`, and matching a
   query to logged entries, shared by food and exercise deletes, lives in
   `entry_matching.py`.
 - `mfp_client.py` holds the `curl_cffi` client, the cached instance, and
-  `is_auth_error`. `auth.py` captures and stores cookies, `paste.py` reads a
-  pasted or copied cookie, `session_persistence.py` saves the cookies MFP
-  re-issues back to `cookies.json`, `refresh.py` renews the session in a
-  headless browser, and `config.py` reads env vars and paths.
+  `is_auth_error`. `auth.py` parses and stores cookies, `auth_command.py` runs
+  the `auth` CLI command, `paste.py` reads a pasted or copied cookie,
+  `session_persistence.py` saves the cookies MFP re-issues back to
+  `cookies.json`, `refresh.py` renews the session in a headless browser, and
+  `config.py` reads env vars and paths.
 - `store.py` is the local SQLite cache, and all SQL lives there. `sync.py`
   gap-fills the cache from MFP.
 
@@ -60,7 +61,8 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
 
 - **stdout belongs to the MCP protocol.** Under stdio, a `print` anywhere on the
   server path corrupts the stream. Use `logging`, which `cli.py` sends to
-  stderr. `print` is fine only in the `auth` command.
+  stderr. `print` is fine only in the `auth` command (`auth_command.py` and
+  `paste.py`).
 - **Every MFP call from a tool goes through `with_session` or
   `run_with_refresh`.** They run blocking work in a thread, and on an auth
   failure they refresh the session and retry once. Calling
@@ -69,8 +71,9 @@ The package is `src/myfitnesspal_mcp/`. A tool call flows top to bottom:
   decides whether a failure triggers a session refresh, and unrecognised
   exceptions fall through to a keyword regex over the message. Errors caused by
   user input, like an unknown meal or no matching entry, subclass
-  `entry_matching.DiaryLookupError`. Their messages quote food names that can contain
-  words like "session", so they must never reach that regex.
+  `entry_matching.DiaryLookupError`, and bad arguments raise `ValueError`.
+  Their messages quote what the user typed, which can contain words like
+  "session", so `is_auth_error` keeps both away from that regex.
 - **A model reads the error messages, so make them actionable.** Say what was
   wrong and how to recover: list what's actually logged, which meals exist, or
   what the valid range is. `no_matching_entry` and `AmbiguousEntry` show the
@@ -104,7 +107,7 @@ warning. Their public surface is:
 
 - Tool names, parameter names, defaults, and the shape of what tools return.
 - CLI commands and flags (`mfp-mcp`, `myfitnesspal-mcp`, `serve`, `auth`,
-  `--http`, `--host`, `--port`).
+  `--check`, `--clipboard`, `--http`, `--host`, `--port`).
 - Environment variables (`MFP_COOKIE`, `MFP_USERNAME`, `MFP_IMPERSONATE`,
   `MFP_SYNC_DAYS`, `MFP_MCP_DATA_DIR`).
 - Where files live and what's in them (`cookies.json`, the SQLite database).

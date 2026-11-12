@@ -1,7 +1,6 @@
 import logging
-from urllib import parse
 
-from .mfp_web import get_document, get_json, site_url
+from .mfp_web import api_url, get_document, get_json, site_url
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ def _result_extras(anchor) -> dict:
         return extras
     parts = info[0].text.strip().split(",")
     if len(parts) >= 3:
-        extras["brand"] = " ".join(parts[0:-2]).strip()
+        extras["brand"] = " ".join(parts[:-2]).strip()
     if len(parts) >= 2:
         extras["serving"] = parts[-2].strip() or None
     calories_text = parts[-1].replace("calories", "").strip()
@@ -42,7 +41,11 @@ def search_results(client, query: str) -> list[dict]:
     )
     results = []
     for anchor in doc.xpath("//a[@data-original-id and @data-weight-ids]"):
-        weight_ids = [w for w in anchor.get("data-weight-ids").split(",") if w]
+        weight_ids = [
+            weight_id
+            for weight_id in anchor.get("data-weight-ids").split(",")
+            if weight_id
+        ]
         if not weight_ids:
             continue
         result = {
@@ -95,9 +98,8 @@ def pair_servings(weight_ids: list[str], serving_sizes: list[dict]) -> list[dict
 def food_details(client, external_id: str | None) -> dict | None:
     if not external_id:
         return None
-    query = parse.urlencode([("fields[]", field) for field in FOOD_DETAIL_FIELDS])
     try:
-        url = parse.urljoin(client.BASE_API_URL, f"v2/foods/{int(external_id)}?{query}")
+        url = api_url(client, f"foods/{int(external_id)}", fields=FOOD_DETAIL_FIELDS)
         item = get_json(client, url)["item"]
         nutrition = item["nutritional_contents"]
         return {
